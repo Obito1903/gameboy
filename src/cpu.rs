@@ -155,6 +155,8 @@ enum Instruction {
     ADD(ArithmeticTarget),
     ADDHL(ArithmeticTarget),
     ADC(ArithmeticTarget),
+    SUB(ArithmeticTarget),
+    SBC(ArithmeticTarget),
 }
 
 impl Instruction {
@@ -283,6 +285,8 @@ impl CPU {
             Instruction::ADD(target) => add(self, target),
             Instruction::ADC(target) => adc(self, target),
             Instruction::ADDHL(target) => addhl(self, target),
+            Instruction::SUB(target) => sub(self, target),
+            Instruction::SBC(target) => sbc(self, target),
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
             }
@@ -400,6 +404,15 @@ fn adc_impl(cpu: &mut CPU, value: u8) -> u8 {
     new_value
 }
 
+fn sub_impl(cpu: &mut CPU, value: u8) -> u8 {
+    let (new_value, overflow) = cpu.registers.a.overflowing_sub(value);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = true;
+    cpu.registers.f.carry = overflow;
+    cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (value & 0xF) > 0xF;
+    new_value
+}
+
 #[inline]
 fn adc(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
     
@@ -433,6 +446,35 @@ fn adc(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
 
         }
         _ => {panic!("ADC target {} not implemented", target)}
+  }
+  cpu.program_counter.wrapping_add(1)
+}
+// SUB: Subtract the value stored in a specific register with the value in the A register
+#[inline]
+fn sub(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
+    match target {
+        ArithmeticTarget::B => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.b);
+        }
+        ArithmeticTarget::C => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.c);
+        }
+        ArithmeticTarget::D => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.d);
+        }
+        ArithmeticTarget::E => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.e);
+        }
+        ArithmeticTarget::H => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.h);
+        }
+        ArithmeticTarget::L => {
+            cpu.registers.a = sub_impl(cpu, cpu.registers.l);
+        }
+        ArithmeticTarget::HL => {
+            cpu.registers.a = sub_impl(cpu, cpu.memory_bus.read_byte(cpu.registers.get_hl()));
+        }
+        _ => { panic!("SUB not implemented for {:?}", target)}
     }
 
     cpu.program_counter.wrapping_add(1)
@@ -448,6 +490,15 @@ fn addhl_impl(cpu: &mut CPU, value: u16) -> u16 {
     // together result in a value bigger than 0xF. If the result is larger than 0xF
     // than the addition caused a carry from the lower nibble to the upper nibble.
     cpu.registers.f.half_carry = (cpu.registers.get_hl() & 0xF) + (value & 0xF) > 0xF;
+    new_value
+}
+fn sbc_impl(cpu: &mut CPU, value: u8) -> u8 {
+    // A - C - B
+    let (new_value, overflow) = cpu.registers.a.overflowing_sub(cpu.registers.f.carry as u8 + value);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = true;
+    cpu.registers.f.carry = overflow;
+    cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (value & 0xF) > 0xF;
     new_value
 }
 
@@ -473,10 +524,39 @@ fn addhl(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
         }
         _ => {panic!("ADDHP target {} not implemented", target)}
     }
+    cpu.program_counter.wrapping_add(1)
+}
+fn sbc(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
+    match target {
+        ArithmeticTarget::B => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.b);
+        }
+        ArithmeticTarget::C => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.c);
+        }
+        ArithmeticTarget::D => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.d);
+        }
+        ArithmeticTarget::E => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.e);
+        }
+        ArithmeticTarget::H => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.h);
+        }
+        ArithmeticTarget::L => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.l);
+        }
+        ArithmeticTarget::HL => {
+            cpu.registers.a = sbc_impl(cpu, cpu.memory_bus.read_byte(cpu.registers.get_hl()));
+        }
+        ArithmeticTarget::A => {
+            cpu.registers.a = sbc_impl(cpu, cpu.registers.a);
+        }
+        _ => { panic!("SBC not implemented for {:?}", target)}
+    };
 
     cpu.program_counter.wrapping_add(1)
 }
-
 
 // Tests
 #[cfg(test)]
@@ -511,5 +591,40 @@ mod tests {
         cpu.program_counter = 0x0000;
         cpu.execute(super::Instruction::ADC(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a, 0x03);
+    }
+    #[test]
+    fn sub() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.registers.c = 0x02;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SUB(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0x01);
+
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.registers.c = 0x04;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SUB(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0xFF);
+    }
+
+    #[test]
+    fn sbc() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.registers.c = 0x02;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0x01);
+        
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.registers.c = 0x02;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0x00);
+
     }
 }
