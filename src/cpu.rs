@@ -144,11 +144,18 @@ enum Instruction {
 
 impl Instruction {
     fn from_byte(byte: u8, prefixed: bool) -> Option<Instruction> {
-        todo!("Instruction::from_byte not implemented")
+        if prefixed {
+            Self::from_byte_prefixed(byte)
+        } else {
+            Self::from_byte_unprefixed(byte)
+        }
     }
 
     fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
-        todo!("Instruction::from_byte_prefixed not implemented")
+        match byte {
+            0x80 => Some(Instruction::ADD(ArithmeticTarget::B)),
+            _ => None,
+        }
     }
 
     fn from_byte_unprefixed(byte: u8) -> Option<Instruction> {
@@ -244,7 +251,18 @@ impl CPU {
     /// - If we can successfully translate the instruction call our execute method else panic which now returns the next program counter
     /// - Set this next program counter on our CPU
     fn step(&mut self) {
-        todo!("Step not implemented")
+        let mut opcode = self.memory_bus.read_byte(self.program_counter);
+        let prefixed = opcode == 0xCB;
+        if prefixed {
+            opcode = self.memory_bus.read_next_byte();
+        }
+        let next_pc = if let Some(instruction) = Instruction::from_byte(opcode, prefixed) {
+            self.execute(instruction)
+        } else {
+            panic!("Instruction {:?} not implemented", opcode)
+        };
+
+        self.program_counter = next_pc;
     }
 
     fn jump(&mut self, should_jump: bool) -> u16 {
@@ -301,6 +319,11 @@ mod tests {
     #[test]
     fn add() {
         let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.registers.c = 0x02;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::ADD(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0x03);
         // TODO: Write test
     }
 }
