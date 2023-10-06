@@ -142,6 +142,20 @@ enum Instruction {
     ADD(ArithmeticTarget),
 }
 
+impl Instruction {
+    fn from_byte(byte: u8, prefixed: bool) -> Option<Instruction> {
+        todo!("Instruction::from_byte not implemented")
+    }
+
+    fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
+        todo!("Instruction::from_byte_prefixed not implemented")
+    }
+
+    fn from_byte_unprefixed(byte: u8) -> Option<Instruction> {
+        todo!("Instruction::from_byte_unprefixed not implemented")
+    }
+}
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -151,14 +165,70 @@ impl Display for Instruction {
     }
 }
 
+struct MemoryBus {
+    memory: [u8; 0xFFFF],
+}
+
+impl MemoryBus {
+    fn new() -> Self {
+        Self {
+            memory: [0; 0xFFFF],
+        }
+    }
+
+    fn read_byte(&self, address: u16) -> u8 {
+        self.memory[address as usize]
+    }
+
+    fn read_next_byte(&self) -> u8 {
+        0
+    }
+    fn write_byte(&self, addr: u16, byte: u8) {}
+}
+
+enum LoadByteTarget {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    HLI,
+}
+enum LoadByteSource {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    D8,
+    HLI,
+}
+enum LoadType {
+    Byte(LoadByteTarget, LoadByteSource),
+}
+
 struct CPU {
     registers: Register,
     program_counter: u16,
     stack_pointer: u16,
+    memory_bus: MemoryBus,
 }
 
 impl CPU {
-    fn execute(&mut self, instruction: Instruction) {
+    fn new() -> Self {
+        Self {
+            registers: Register::new(),
+            program_counter: 0,
+            stack_pointer: 0,
+            memory_bus: MemoryBus::new(),
+        }
+    }
+
+    fn execute(&mut self, instruction: Instruction) -> u16 {
         match instruction {
             Instruction::ADD(target) => add(self, target),
             _ => {
@@ -166,10 +236,41 @@ impl CPU {
             }
         }
     }
+
+    /// Read instruction from memory and execute it
+    /// The full set of steps is as follows:
+    /// - Use the program counter to read the instruction byte from memory.
+    /// - Translate the byte to one of the instances of the Instruction enum
+    /// - If we can successfully translate the instruction call our execute method else panic which now returns the next program counter
+    /// - Set this next program counter on our CPU
+    fn step(&mut self) {
+        todo!("Step not implemented")
+    }
+
+    fn jump(&mut self, should_jump: bool) -> u16 {
+        todo!("Jump not implemented")
+    }
+
+    fn call(&mut self, should_call: bool) -> u16 {
+        todo!("Call not implemented")
+    }
+
+    fn ret(&mut self, should_return: bool) -> u16 {
+        todo!("Ret not implemented")
+    }
+
+    // Stack
+    fn push(&mut self, value: u16) {
+        todo!("Push not implemented")
+    }
+
+    fn pop(&mut self) -> u16 {
+        todo!("Pop not implemented")
+    }
 }
 
 #[inline]
-fn add(cpu: &mut CPU, target: ArithmeticTarget) {
+fn add(cpu: &mut CPU, target: ArithmeticTarget) -> u16 {
     let mut add_impl = |value: u8| -> u8 {
         let (new_value, overflow) = cpu.registers.a.overflowing_add(value);
         cpu.registers.f.zero = new_value == 0;
@@ -179,20 +280,27 @@ fn add(cpu: &mut CPU, target: ArithmeticTarget) {
         // together result in a value bigger than 0xF. If the result is larger than 0xF
         // than the addition caused a carry from the lower nibble to the upper nibble.
         cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (value & 0xF) > 0xF;
-        /* TODO: Set flags */
         new_value
     };
 
     match target {
         ArithmeticTarget::C => {
-            let value = cpu.registers.c;
-            cpu.registers.a = add_impl(value);
+            cpu.registers.a = add_impl(cpu.registers.c);
         }
-        ArithmeticTarget::B => {
-            let value = cpu.registers.b;
-            cpu.registers.a = add_impl(value);
-        }
-
         _ => { /* TODO */ }
+    }
+
+    cpu.program_counter.wrapping_add(1)
+}
+
+// Tests
+#[cfg(test)]
+mod tests {
+    use super::CPU;
+
+    #[test]
+    fn add() {
+        let mut cpu = CPU::new();
+        // TODO: Write test
     }
 }
