@@ -4,11 +4,11 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy)]
-struct FlagsRegister {
-    zero: bool,
-    subtract: bool,
-    half_carry: bool,
-    carry: bool,
+pub struct FlagsRegister {
+    pub zero: bool,
+    pub subtract: bool,
+    pub half_carry: bool,
+    pub carry: bool,
 }
 
 impl FlagsRegister {
@@ -53,15 +53,15 @@ impl std::convert::From<u8> for FlagsRegister {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Register {
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    f: FlagsRegister,
-    h: u8,
-    l: u8,
+pub struct Register {
+    pub a: u8,
+    pub b: u8,
+    pub c: u8,
+    pub d: u8,
+    pub e: u8,
+    pub f: FlagsRegister,
+    pub h: u8,
+    pub l: u8,
 }
 
 impl Register {
@@ -78,38 +78,38 @@ impl Register {
         }
     }
 
-    fn get_af(&self) -> u16 {
+    pub fn get_af(&self) -> u16 {
         (self.a as u16) << 8 | (<FlagsRegister as Into<u8>>::into(self.f) as u16)
     }
 
-    fn set_af(&mut self, value: u16) {
+    pub fn set_af(&mut self, value: u16) {
         self.a = (value >> 8) as u8;
         self.f = (value as u8).into();
     }
 
-    fn get_bc(&self) -> u16 {
+    pub fn get_bc(&self) -> u16 {
         (self.b as u16) << 8 | (self.c as u16)
     }
 
-    fn set_bc(&mut self, value: u16) {
+    pub fn set_bc(&mut self, value: u16) {
         self.b = (value >> 8) as u8;
         self.c = value as u8;
     }
 
-    fn get_de(&self) -> u16 {
+    pub fn get_de(&self) -> u16 {
         (self.d as u16) << 8 | (self.e as u16)
     }
 
-    fn set_de(&mut self, value: u16) {
+    pub fn set_de(&mut self, value: u16) {
         self.d = (value >> 8) as u8;
         self.e = value as u8;
     }
 
-    fn get_hl(&self) -> u16 {
+    pub fn get_hl(&self) -> u16 {
         (self.h as u16) << 8 | (self.l as u16)
     }
 
-    fn set_hl(&mut self, value: u16) {
+    pub fn set_hl(&mut self, value: u16) {
         self.h = (value >> 8) as u8;
         self.l = value as u8;
     }
@@ -1342,9 +1342,12 @@ impl Instruction {
     // Return the clock cycles taken by the instruction
     fn execute(&self, cpu: &mut CPU) -> u8 {
         match self {
+            Self::ADD(target, source) => Self::add(cpu, *target, *source),
+            Self::ADC(target, source) => Self::adc(cpu, *target, *source),
+            Self::AND(source) => Self::and(cpu, *source),
+            Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
             Self::NOP => 4,
             Self::STOP => 4,
-            Self::ADD(target, source) => Self::add(cpu, *target, *source),
             _ => 0,
         }
     }
@@ -1359,7 +1362,7 @@ impl Instruction {
                         cycle = cycle + 4;
                         target_value.overflowing_add(source_value as u8)
                     }
-                    TargetSize::Bit(_) => panic!("Cannot add bit"),
+                    TargetSize::Bit(_) => panic!("Cannot ADD bit"),
                 };
                 target.set(cpu, TargetSize::Byte(new_value));
                 ((new_value == 0), overflow)
@@ -1374,12 +1377,12 @@ impl Instruction {
                         cycle = cycle + 4;
                         target_value.overflowing_add(source_value)
                     }
-                    TargetSize::Bit(_) => panic!("Cannot add bit"),
+                    TargetSize::Bit(_) => panic!("Cannot ADD bit"),
                 };
                 target.set(cpu, TargetSize::Word(new_value));
                 ((new_value == 0), overflow)
             }
-            TargetSize::Bit(_) => panic!("Cannot add bit"),
+            TargetSize::Bit(_) => panic!("Cannot ADD bit"),
         };
         cpu.registers.f.zero = zero;
         cpu.registers.f.subtract = false;
@@ -1396,7 +1399,7 @@ impl Instruction {
                             (target_value & 0xF) + (source_value & 0xF) > 0xF;
                         target_value.overflowing_add(source_value)
                     }
-                    _ => panic!("Cannot add bit"),
+                    _ => panic!("ADC Only available for bytes sources"),
                 };
                 let mut overflow2 = false;
                 if cpu.registers.f.carry {
@@ -1406,7 +1409,7 @@ impl Instruction {
                 target.set(cpu, TargetSize::Byte(new_value));
                 ((new_value == 0), overflow || overflow2)
             }
-            _ => panic!("This instruction is only available for bytes"),
+            _ => panic!("ADC is only available for bytes targets"),
         };
         cpu.registers.f.zero = zero;
         cpu.registers.f.subtract = false;
@@ -1417,8 +1420,24 @@ impl Instruction {
         }
     }
 
-    fn bit(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
-        todo!("Bit not implemented")
+    fn and(cpu: &mut CPU, source: OperandTypes) -> u8 {
+        let new_value = match source.get(cpu) {
+            TargetSize::Byte(source_value) => cpu.registers.a & source_value,
+            _ => panic!("AND only available for bytes sources"),
+        };
+        cpu.registers.a = new_value;
+
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        match source {
+            OperandTypes::D8(_) => 8,
+            _ => 4,
+        }
+    }
+
+    fn bit(cpu: &mut CPU, bit: u8, source: OperandTypes) -> u8 {
+        todo!("BIT not implemented")
     }
 
     fn call(cpu: &mut CPU, condition: Option<OperandTypes>, address: OperandTypes) -> u8 {
@@ -1574,8 +1593,8 @@ impl Instruction {
     }
 }
 
-struct MemoryBus {
-    memory: [u8; 0xFFFF],
+pub struct MemoryBus {
+    pub memory: [u8; 0xFFFF],
 }
 
 impl MemoryBus {
@@ -1597,24 +1616,24 @@ impl MemoryBus {
         self.read_byte(current + 1)
     }
 
-    fn write_byte(&mut self, addr: u16, byte: u8) {
+    pub fn write_byte(&mut self, addr: u16, byte: u8) {
         self.memory[addr as usize] = byte;
     }
-    fn write_word(&mut self, addr: u16, word: u16) {
+    pub fn write_word(&mut self, addr: u16, word: u16) {
         self.write_byte(addr, (word >> 8) as u8);
         self.write_byte(addr + 1, word as u8);
     }
 }
 
-struct CPU {
-    registers: Register,
-    program_counter: u16,
-    stack_pointer: u16,
-    memory_bus: MemoryBus,
+pub struct CPU {
+    pub registers: Register,
+    pub program_counter: u16,
+    pub stack_pointer: u16,
+    pub memory_bus: MemoryBus,
 }
 
 impl CPU {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             registers: Register::new(),
             program_counter: 0,
@@ -1642,7 +1661,7 @@ impl CPU {
         }
     }
 
-    fn run(&mut self, mhz: f32) {
+    pub fn run(&mut self, mhz: f32) {
         let cycles_per_second = mhz * 1_000_000.0;
         loop {
             match self.read_instruction() {
@@ -1697,30 +1716,3 @@ impl CPU {
 }
 
 // Tests
-#[cfg(test)]
-mod tests {
-    use super::CPU;
-
-    #[test]
-    fn add_c() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0x01;
-        cpu.registers.c = 0x02;
-        cpu.program_counter = 0x0000;
-        cpu.memory_bus.write_byte(0x0000, 0x81);
-        cpu.memory_bus.write_byte(0x0001, 0x10);
-        cpu.run(4.194304);
-        assert_eq!(cpu.registers.a, 0x03);
-        assert_eq!(cpu.program_counter, 0x0002);
-    }
-
-    #[test]
-    fn addhl_bc() {
-        let mut cpu = CPU::new();
-        cpu.registers.set_hl(0x01);
-        cpu.registers.set_bc(0x02);
-        cpu.program_counter = 0x0000;
-        cpu.memory_bus.write_byte(0x0000, 0x09);
-        assert_eq!(cpu.registers.get_hl(), 0x03);
-    }
-}
