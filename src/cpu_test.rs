@@ -101,4 +101,47 @@ mod cpu_tests {
         assert_eq!(cpu.registers.a, 0x00);
         assert_eq!(cpu.program_counter, 0x0003);
     }
+
+    #[test]
+    fn bit_6_h() {
+        let mut cpu = CPU::new();
+        cpu.registers.h = 0b0100_0000;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x74);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
+
+    #[test]
+    fn bit_4_b() {
+        let mut cpu = CPU::new();
+        cpu.registers.h = 0b0100_0000;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x40);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
+
+    #[test]
+    fn call_nn() {
+        let mut cpu = CPU::new();
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCD);
+        cpu.memory_bus.write_byte(0x0001, 0x00);
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0010, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.program_counter, 0x0011);
+        assert_eq!(cpu.stack_pointer, 0xFFFD);
+        assert_eq!(cpu.memory_bus.read_word(0xFFFD), 0x0003);
+    }
 }
