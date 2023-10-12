@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    ops::{Shl, Shr},
-};
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy)]
 struct FlagsRegister {
@@ -160,17 +157,9 @@ enum Instruction {
     ADC(ArithmeticTarget),
     SUB(ArithmeticTarget),
     SBC(ArithmeticTarget),
-
-    CP(ArithmeticTarget),
-    INC(ArithmeticTarget),
-    DEC(ArithmeticTarget),
-
-    RRA,
-    RRCA,
-    RLA,
-    RLCA,
-    CCF,
-    SCF,
+    AND(ArithmeticTarget),
+    OR(ArithmeticTarget),
+    XOR(ArithmeticTarget),
 }
 
 impl Instruction {
@@ -184,11 +173,6 @@ impl Instruction {
 
     fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
         match byte {
-            0x07 => Some(Instruction::RLCA),
-            0x0F => Some(Instruction::RRCA),
-            0x17 => Some(Instruction::RLA),
-            0x1F => Some(Instruction::RRA),
-
             0x80 => Some(Instruction::ADD(ArithmeticTarget::B)),
             0x81 => Some(Instruction::ADD(ArithmeticTarget::C)),
             0x82 => Some(Instruction::ADD(ArithmeticTarget::D)),
@@ -214,11 +198,7 @@ impl Instruction {
 
             0xC6 => Some(Instruction::ADD(ArithmeticTarget::d8)),
             0xCE => Some(Instruction::ADC(ArithmeticTarget::d8)),
-
             // 0xE8 => Some(Instruction::ADDSP(ArithmeticTarget::r8)),
-            0x3F => Some(Instruction::CCF),
-            0x37 => Some(Instruction::SCF),
-
             _ => None,
         }
     }
@@ -234,8 +214,6 @@ impl Display for Instruction {
             Instruction::ADD(target) => write!(f, "ADD {}", target),
             Instruction::ADC(target) => write!(f, "ADC {}", target),
             Instruction::ADDHL(target) => write!(f, "ADDHL {}", target),
-            Instruction::CCF => write!(f, "CCF"),
-            Instruction::SCF => write!(f, "SCF"),
             _ => write!(f, "Display not implemented for {:?}", self),
         }
     }
@@ -306,33 +284,14 @@ impl CPU {
 
     fn execute(&mut self, instruction: Instruction) {
         match instruction {
-            Instruction::ADD(target) => execute_and_resolve_1byte(self, add, target),
-            Instruction::ADC(target) => execute_and_resolve_1byte(self, adc, target),
+            Instruction::ADD(target) => execute_and_resolve_target(self, add, target),
+            Instruction::ADC(target) => execute_and_resolve_target(self, adc, target),
             Instruction::ADDHL(target) => execute_and_resolve_2bytes(self, addhl, target),
-            Instruction::SUB(target) => execute_and_resolve_1byte(self, sub, target),
-            Instruction::SBC(target) => execute_and_resolve_1byte(self, sbc, target),
-            Instruction::CP(target) => execute_and_resolve_1byte(self, cp, target),
-            Instruction::INC(target) => match target {
-                ArithmeticTarget::BC
-                | ArithmeticTarget::DE
-                | ArithmeticTarget::HL
-                | ArithmeticTarget::SP => inc_2bytes(self, target),
-                _ => execute_and_resolve_set_target(self, inc, target),
-            },
-            Instruction::DEC(target) => match target {
-                ArithmeticTarget::BC
-                | ArithmeticTarget::DE
-                | ArithmeticTarget::HL
-                | ArithmeticTarget::SP => dec_2bytes(self, target),
-                _ => execute_and_resolve_set_target(self, dec, target),
-            },
-            Instruction::RRA => rra(self),
-            Instruction::RRCA => rrca(self),
-            Instruction::RLA => rla(self),
-            Instruction::RLCA => rlca(self),
-            Instruction::CCF => ccf(self),
-            Instruction::SCF => scf(self),
-
+            Instruction::SUB(target) => execute_and_resolve_target(self, sub, target),
+            Instruction::SBC(target) => execute_and_resolve_target(self, sbc, target),
+            Instruction::AND(target) => execute_and_resolve_target(self, and, target),
+            Instruction::OR(target) => execute_and_resolve_target(self, or, target),
+            Instruction::XOR(target) => execute_and_resolve_target(self, xor, target),
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
             }
@@ -380,7 +339,7 @@ impl CPU {
     }
 }
 
-fn execute_and_resolve_1byte(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: ArithmeticTarget) {
+fn execute_and_resolve_target(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: ArithmeticTarget) {
     match target {
         ArithmeticTarget::A => fonc(cpu, cpu.registers.a),
         ArithmeticTarget::B => fonc(cpu, cpu.registers.b),
@@ -390,37 +349,7 @@ fn execute_and_resolve_1byte(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: Arit
         ArithmeticTarget::H => fonc(cpu, cpu.registers.h),
         ArithmeticTarget::L => fonc(cpu, cpu.registers.l),
         ArithmeticTarget::HL => fonc(cpu, cpu.memory_bus.read_byte(cpu.registers.get_hl())),
-        ArithmeticTarget::d8 => {
-            fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter));
-            cpu.program_counter = cpu.program_counter.wrapping_add(1)
-        }
-        _ => {
-            panic!("ADD target {} not implemented", target)
-        }
-    }
-}
-fn execute_and_resolve_set_target(
-    cpu: &mut CPU,
-    fonc: fn(&mut CPU, u8) -> u8,
-    target: ArithmeticTarget,
-) {
-    match target {
-        ArithmeticTarget::A => cpu.registers.a = fonc(cpu, cpu.registers.a),
-        ArithmeticTarget::B => cpu.registers.b = fonc(cpu, cpu.registers.b),
-        ArithmeticTarget::C => cpu.registers.c = fonc(cpu, cpu.registers.c),
-        ArithmeticTarget::D => cpu.registers.d = fonc(cpu, cpu.registers.d),
-        ArithmeticTarget::E => cpu.registers.e = fonc(cpu, cpu.registers.e),
-        ArithmeticTarget::H => cpu.registers.h = fonc(cpu, cpu.registers.h),
-        ArithmeticTarget::L => cpu.registers.l = fonc(cpu, cpu.registers.l),
-        ArithmeticTarget::HL => {
-            let hl = cpu.registers.get_hl();
-            let res = fonc(cpu, cpu.memory_bus.read_byte(hl));
-            cpu.memory_bus.write_byte(hl, res);
-        }
-        ArithmeticTarget::d8 => {
-            let res = fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter));
-            cpu.memory_bus.write_byte(cpu.program_counter, res);
-        }
+        ArithmeticTarget::d8 => fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter)),
         _ => {
             panic!("ADD target {} not implemented", target)
         }
@@ -498,7 +427,6 @@ fn addhl(cpu: &mut CPU, value: u16) {
     cpu.registers.set_hl(new_value);
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
-
 fn sbc(cpu: &mut CPU, value: u8) {
     // A - C - B
     let (new_value, overflow) = cpu
@@ -513,206 +441,26 @@ fn sbc(cpu: &mut CPU, value: u8) {
     cpu.registers.a = new_value;
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
-
-#[inline]
-fn cp(cpu: &mut CPU, value: u8) {
-    let (new_value, overflow) = cpu.registers.a.overflowing_sub(value);
-    cpu.registers.f.zero = new_value == 0;
-    cpu.registers.f.subtract = true;
-    cpu.registers.f.carry = overflow;
-    cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (value & 0xF) > 0xF;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+fn and(cpu: &mut CPU,value: u8){
+    cpu.registers.a &= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=true;
 }
-
-#[inline]
-fn inc(cpu: &mut CPU, target: u8) -> u8 {
-    let (result, carry_per_bit) = target.overflowing_add(1);
-    cpu.registers.f.zero = result == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.half_carry = carry_per_bit;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-    result
+fn or(cpu: &mut CPU,value: u8){
+    cpu.registers.a |= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=false;
 }
-
-#[inline]
-fn inchl(cpu: &mut CPU) {
-    let (new_value, overflow) = cpu.registers.get_hl().overflowing_add(1);
-    cpu.registers.f.zero = new_value == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = overflow;
-
-    cpu.registers.set_hl(new_value);
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-fn inc_2bytes(cpu: &mut CPU, target: ArithmeticTarget) {
-    match target {
-        ArithmeticTarget::BC => {
-            let bc = cpu.registers.get_bc();
-            let res = inc_2bytes_impl(cpu, bc);
-            cpu.registers.set_bc(res);
-        }
-        ArithmeticTarget::DE => {
-            let de = cpu.registers.get_de();
-            let res = inc_2bytes_impl(cpu, de);
-            cpu.registers.set_de(res);
-        }
-        ArithmeticTarget::HL => {
-            let hl = cpu.registers.get_hl();
-            let res = inc_2bytes_impl(cpu, hl);
-            cpu.registers.set_hl(res);
-        }
-        ArithmeticTarget::SP => {
-            let sp = cpu.stack_pointer;
-            cpu.stack_pointer = inc_2bytes_impl(cpu, sp)
-        }
-        _ => {
-            panic!("INC target {} not implemented", target)
-        }
-    }
-}
-fn inc_2bytes_impl(cpu: &mut CPU, value: u16) -> u16 {
-    let (new_value, overflow) = value.overflowing_add(1);
-    cpu.registers.f.zero = new_value == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = overflow;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-    new_value
-}
-
-#[inline]
-fn dec(cpu: &mut CPU, target: u8) -> u8 {
-    let (result, carry_per_bit) = target.overflowing_sub(1);
-    cpu.registers.f.zero = result == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.half_carry = carry_per_bit;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-    result
-}
-
-#[inline]
-fn dechl(cpu: &mut CPU) {
-    let (new_value, overflow) = cpu.registers.get_hl().overflowing_sub(1);
-    cpu.registers.f.zero = new_value == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = overflow;
-
-    cpu.registers.set_hl(new_value);
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-fn dec_2bytes(cpu: &mut CPU, target: ArithmeticTarget) {
-    match target {
-        ArithmeticTarget::BC => {
-            let bc = cpu.registers.get_bc();
-            let res = dec_2bytes_impl(cpu, bc);
-            cpu.registers.set_bc(res);
-        }
-        ArithmeticTarget::DE => {
-            let de = cpu.registers.get_de();
-            let res = dec_2bytes_impl(cpu, de);
-            cpu.registers.set_de(res);
-        }
-        ArithmeticTarget::HL => {
-            let hl = cpu.registers.get_hl();
-            let res = dec_2bytes_impl(cpu, hl);
-            cpu.registers.set_hl(res);
-        }
-        ArithmeticTarget::SP => {
-            let sp = cpu.stack_pointer;
-            cpu.stack_pointer = dec_2bytes_impl(cpu, sp)
-        }
-        _ => {
-            panic!("INC target {} not implemented", target)
-        }
-    }
-}
-fn dec_2bytes_impl(cpu: &mut CPU, value: u16) -> u16 {
-    let (new_value, overflow) = value.overflowing_sub(1);
-    cpu.registers.f.zero = new_value == 0;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = overflow;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-    new_value
-}
-fn rra(cpu: &mut CPU) {
-    let new_carry = cpu.registers.a & 0b0000_0001 != 0;
-    let mut new_value = cpu.registers.a.shr(1);
-    if cpu.registers.f.carry {
-        new_value = new_value | 0b1000_0000;
-    }
-
-    cpu.registers.f.zero = false;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = new_carry;
-
-    cpu.registers.a = new_value;
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-fn rrca(cpu: &mut CPU) {
-    let (new_value, new_carry) = cpu.registers.a.overflowing_shr(1);
-
-    cpu.registers.f.zero = false;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = new_carry;
-    cpu.registers.a = new_value;
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-fn rla(cpu: &mut CPU) {
-    let new_carry = cpu.registers.a & 0b1000_0000 != 0;
-
-    let mut new_value = cpu.registers.a.shl(1);
-    if cpu.registers.f.carry {
-        new_value = new_value | 1;
-    }
-
-    cpu.registers.f.zero = false;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = new_carry;
-
-    cpu.registers.a = new_value;
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-fn rlca(cpu: &mut CPU) {
-    let (new_value, new_carry) = cpu.registers.a.overflowing_shl(1);
-
-    cpu.registers.f.zero = false;
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = new_carry;
-    cpu.registers.a = new_value;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-#[inline]
-fn ccf(cpu: &mut CPU) {
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = !cpu.registers.f.carry;
-    // Half Carry is set if adding the lower nibbles of the value and register A
-    // together result in a value bigger than 0xF. If the result is larger than 0xF
-    // than the addition caused a carry from the lower nibble to the upper nibble.
-    cpu.registers.f.half_carry = false;
-
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
-}
-
-#[inline]
-fn scf(cpu: &mut CPU) {
-    cpu.registers.f.subtract = false;
-    cpu.registers.f.carry = true;
-    // Half Carry is set if adding the lower nibbles of the value and register A
-    // together result in a value bigger than 0xF. If the result is larger than 0xF
-    // than the addition caused a carry from the lower nibble to the upper nibble.
-    cpu.registers.f.half_carry = false;
-    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+fn xor(cpu: &mut CPU,value: u8){
+    cpu.registers.a ^= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=false;
 }
 
 // Tests
@@ -783,108 +531,31 @@ mod tests {
         cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a, 0x00);
     }
-
     #[test]
-    fn cp() {
+    fn and(){
         let mut cpu = CPU::new();
-        cpu.registers.a = 0x03;
-        cpu.registers.c = 0x02;
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
         cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::CP(super::ArithmeticTarget::C));
-        assert_eq!(cpu.registers.a, 0x03);
+        cpu.execute(super::Instruction::AND(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b1000);
     }
-
     #[test]
-    fn inc() {
+    fn or(){
         let mut cpu = CPU::new();
-        cpu.registers.a = 0x03;
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
         cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::INC(super::ArithmeticTarget::A));
-        assert_eq!(cpu.registers.a, 0x04);
+        cpu.execute(super::Instruction::OR(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b1110);
     }
-
     #[test]
-    fn inc_bc() {
+    fn xor(){
         let mut cpu = CPU::new();
-        cpu.registers.set_bc(0x0001);
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
         cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::INC(super::ArithmeticTarget::BC));
-        assert_eq!(cpu.registers.get_bc(), 0x0002);
-    }
-
-    #[test]
-    fn dec() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0x03;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::DEC(super::ArithmeticTarget::A));
-        assert_eq!(cpu.registers.a, 0x02);
-    }
-
-    #[test]
-    fn rra() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0b0000_0001;
-        cpu.registers.f.carry = true;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::RRA);
-        assert_eq!(cpu.registers.a, 0b1000_0000);
-        assert_eq!(cpu.registers.f.carry, true);
-    }
-
-    #[test]
-    fn rrca() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0b0000_0010;
-        cpu.registers.f.carry = true;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::RRCA);
-        assert_eq!(cpu.registers.a, 0b0000_0001);
-        assert_eq!(cpu.registers.f.carry, false);
-    }
-
-    #[test]
-    fn rla() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0b1000_0000;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::RLA);
-        assert_eq!(cpu.registers.a, 0b0000_0000);
-        assert_eq!(cpu.registers.f.carry, true);
-    }
-
-    #[test]
-    fn rlca() {
-        let mut cpu = CPU::new();
-        cpu.registers.a = 0b1000_0000;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::RLCA);
-        assert_eq!(cpu.registers.a, 0b0000_0000);
-        assert_eq!(cpu.registers.f.carry, false);
-    }
-
-    fn ccf() {
-        let mut cpu = CPU::new();
-        cpu.registers.f.carry = false;
-        cpu.registers.f.half_carry = true;
-        cpu.registers.f.subtract = true;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::CCF);
-        assert_eq!(cpu.registers.f.carry, true);
-        assert_eq!(cpu.registers.f.half_carry, false);
-        assert_eq!(cpu.registers.f.subtract, false);
-    }
-
-    #[test]
-    fn scf() {
-        let mut cpu = CPU::new();
-        cpu.registers.f.carry = false;
-        cpu.registers.f.half_carry = true;
-        cpu.registers.f.subtract = true;
-        cpu.program_counter = 0x0000;
-        cpu.execute(super::Instruction::CCF);
-        assert_eq!(cpu.registers.f.carry, true);
-        assert_eq!(cpu.registers.f.half_carry, false);
-        assert_eq!(cpu.registers.f.subtract, false);
+        cpu.execute(super::Instruction::XOR(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b0110);
     }
 }
