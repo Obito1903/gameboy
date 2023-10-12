@@ -1346,6 +1346,11 @@ impl Instruction {
             Self::ADC(target, source) => Self::adc(cpu, *target, *source),
             Self::AND(source) => Self::and(cpu, *source),
             Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
+            Self::INC(target) => Self::inc(cpu, *target),
+            Self::DEC(target) => Self::dec(cpu, *target),
+            Self::CP(source) => Self::cp(cpu, *source),
+            Self::CPL => Self::cpl(cpu),
+            Self::RL(target) => Self::rl(cpu, *target),
             Self::NOP => 4,
             Self::STOP => 4,
             _ => 0,
@@ -1448,12 +1453,28 @@ impl Instruction {
         todo!("CCF not implemented")
     }
 
+    ///Subtracts from the 8-bit A register, the 8-bit register r, and updates flags based on the result.
     fn cp(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("CP not implemented")
+        let cycle = 8;
+        let (zero, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu.registers.a.overflowing_sub(source_value);
+                ((new_value == 0), overflow)
+            }
+            _ => panic!("This instruction is only available for bytes"),
+        };
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     fn cpl(cpu: &mut CPU) -> u8 {
-        todo!("CPL not implemented")
+        let cycle = 4;
+        cpu.registers.a = !cpu.registers.a;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.half_carry = true;
+        cycle
     }
 
     fn daa(cpu: &mut CPU) -> u8 {
@@ -1461,7 +1482,24 @@ impl Instruction {
     }
 
     fn dec(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("DEC not implemented")
+        let cycle = 4;
+        let (zero, overflow) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_sub(1);
+                target.set(cpu, TargetSize::Byte(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Word(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_sub(1);
+                target.set(cpu, TargetSize::Word(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Bit(_) => panic!("Cannot DEC bit"),
+        };
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     fn di(cpu: &mut CPU) -> u8 {
@@ -1477,7 +1515,27 @@ impl Instruction {
     }
 
     fn inc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("INC not implemented")
+        let cycle = 4;
+
+        let (zero, overflow) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_add(1);
+                target.set(cpu, TargetSize::Byte(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Word(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_add(1);
+                target.set(cpu, TargetSize::Word(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Bit(_) => panic!("Cannot INC bit"),
+        };
+
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = overflow;
+
+        cycle
     }
 
     fn jr(cpu: &mut CPU, condition: Option<OperandTypes>, offset: OperandTypes) -> u8 {
@@ -1521,7 +1579,26 @@ impl Instruction {
     }
 
     fn rl(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RL not implemented")
+        let cycle = 8;
+        let new_carry = cpu.registers.a & 0b1000_0000 != 0;
+
+        let mut new_value = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_value = target_value << 1;
+                new_value
+            }
+            _ => panic!("RL is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 1;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rla(cpu: &mut CPU) -> u8 {
