@@ -157,6 +157,8 @@ enum Instruction {
     ADC(ArithmeticTarget),
     SUB(ArithmeticTarget),
     SBC(ArithmeticTarget),
+    CCF,
+    SCF,
 }
 
 impl Instruction {
@@ -196,6 +198,10 @@ impl Instruction {
             0xC6 => Some(Instruction::ADD(ArithmeticTarget::d8)),
             0xCE => Some(Instruction::ADC(ArithmeticTarget::d8)),
             // 0xE8 => Some(Instruction::ADDSP(ArithmeticTarget::r8)),
+
+            0x3F => Some(Instruction::CCF),
+            0x37 => Some(Instruction::SCF),
+
             _ => None,
         }
     }
@@ -211,6 +217,8 @@ impl Display for Instruction {
             Instruction::ADD(target) => write!(f, "ADD {}", target),
             Instruction::ADC(target) => write!(f, "ADC {}", target),
             Instruction::ADDHL(target) => write!(f, "ADDHL {}", target),
+            Instruction::CCF => write!(f, "CCF"),
+            Instruction::SCF => write!(f, "SCF"),
             _ => write!(f, "Display not implemented for {:?}", self),
         }
     }
@@ -286,6 +294,8 @@ impl CPU {
             Instruction::ADDHL(target) => execute_and_resolve_2bytes(self, addhl, target),
             Instruction::SUB(target) => execute_and_resolve_target(self, sub, target),
             Instruction::SBC(target) => execute_and_resolve_target(self, sbc, target),
+            Instruction::CCF => ccf(self),
+            Instruction::SCF => scf(self),
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
             }
@@ -343,7 +353,9 @@ fn execute_and_resolve_target(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: Ari
         ArithmeticTarget::H => fonc(cpu, cpu.registers.h),
         ArithmeticTarget::L => fonc(cpu, cpu.registers.l),
         ArithmeticTarget::HL => fonc(cpu, cpu.memory_bus.read_byte(cpu.registers.get_hl())),
-        ArithmeticTarget::d8 => fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter)),
+        ArithmeticTarget::d8 => {
+            fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter)); 
+            cpu.program_counter = cpu.program_counter.wrapping_add(1)},
         _ => {
             panic!("ADD target {} not implemented", target)
         }
@@ -436,6 +448,30 @@ fn sbc(cpu: &mut CPU, value: u8) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+#[inline]
+fn ccf(cpu: &mut CPU) {
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = !cpu.registers.f.carry;
+    // Half Carry is set if adding the lower nibbles of the value and register A
+    // together result in a value bigger than 0xF. If the result is larger than 0xF
+    // than the addition caused a carry from the lower nibble to the upper nibble.
+    cpu.registers.f.half_carry = false;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+#[inline]
+fn scf(cpu: &mut CPU) {
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = true;
+    // Half Carry is set if adding the lower nibbles of the value and register A
+    // together result in a value bigger than 0xF. If the result is larger than 0xF
+    // than the addition caused a carry from the lower nibble to the upper nibble.
+    cpu.registers.f.half_carry = false;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
 // Tests
 #[cfg(test)]
 mod tests {
@@ -503,5 +539,31 @@ mod tests {
         cpu.program_counter = 0x0000;
         cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a, 0x00);
+    }
+
+    #[test]
+    fn ccf() {
+        let mut cpu = CPU::new();
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = true;
+        cpu.registers.f.subtract = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::CCF);
+        assert_eq!(cpu.registers.f.carry, true);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+    }
+
+    #[test]
+    fn scf() {
+        let mut cpu = CPU::new();
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = true;
+        cpu.registers.f.subtract = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::CCF);
+        assert_eq!(cpu.registers.f.carry, true);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.subtract, false);
     }
 }
