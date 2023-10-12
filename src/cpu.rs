@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{Shl, Shr},
+};
 
 #[derive(Debug, Clone, Copy)]
 struct FlagsRegister {
@@ -157,6 +160,10 @@ enum Instruction {
     ADC(ArithmeticTarget),
     SUB(ArithmeticTarget),
     SBC(ArithmeticTarget),
+    RRA,
+    RRCA,
+    RLA,
+    RLCA,
 }
 
 impl Instruction {
@@ -170,6 +177,11 @@ impl Instruction {
 
     fn from_byte_prefixed(byte: u8) -> Option<Instruction> {
         match byte {
+            0x07 => Some(Instruction::RLCA),
+            0x0F => Some(Instruction::RRCA),
+            0x17 => Some(Instruction::RLA),
+            0x1F => Some(Instruction::RRA),
+
             0x80 => Some(Instruction::ADD(ArithmeticTarget::B)),
             0x81 => Some(Instruction::ADD(ArithmeticTarget::C)),
             0x82 => Some(Instruction::ADD(ArithmeticTarget::D)),
@@ -195,6 +207,7 @@ impl Instruction {
 
             0xC6 => Some(Instruction::ADD(ArithmeticTarget::d8)),
             0xCE => Some(Instruction::ADC(ArithmeticTarget::d8)),
+
             // 0xE8 => Some(Instruction::ADDSP(ArithmeticTarget::r8)),
             _ => None,
         }
@@ -281,11 +294,15 @@ impl CPU {
 
     fn execute(&mut self, instruction: Instruction) {
         match instruction {
-            Instruction::ADD(target) => execute_and_resolve_target(self, add, target),
-            Instruction::ADC(target) => execute_and_resolve_target(self, adc, target),
+            Instruction::ADD(target) => execute_and_resolve_1byte(self, add, target),
+            Instruction::ADC(target) => execute_and_resolve_1byte(self, adc, target),
             Instruction::ADDHL(target) => execute_and_resolve_2bytes(self, addhl, target),
-            Instruction::SUB(target) => execute_and_resolve_target(self, sub, target),
-            Instruction::SBC(target) => execute_and_resolve_target(self, sbc, target),
+            Instruction::SUB(target) => execute_and_resolve_1byte(self, sub, target),
+            Instruction::SBC(target) => execute_and_resolve_1byte(self, sbc, target),
+            Instruction::RRA => rra(self),
+            Instruction::RRCA => rrca(self),
+            Instruction::RLA => rla(self),
+            Instruction::RLCA => rlca(self),
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
             }
@@ -333,7 +350,7 @@ impl CPU {
     }
 }
 
-fn execute_and_resolve_target(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: ArithmeticTarget) {
+fn execute_and_resolve_1byte(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: ArithmeticTarget) {
     match target {
         ArithmeticTarget::A => fonc(cpu, cpu.registers.a),
         ArithmeticTarget::B => fonc(cpu, cpu.registers.b),
@@ -436,6 +453,57 @@ fn sbc(cpu: &mut CPU, value: u8) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+fn rra(cpu: &mut CPU) {
+    let new_carry = cpu.registers.a & 0b0000_0001 != 0;
+    let mut new_value = cpu.registers.a.shr(1);
+    if cpu.registers.f.carry {
+        new_value = new_value | 0b1000_0000;
+    }
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+
+    cpu.registers.a = new_value;
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn rrca(cpu: &mut CPU) {
+    let (new_value, new_carry) = cpu.registers.a.overflowing_shr(1);
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.registers.a = new_value;
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn rla(cpu: &mut CPU) {
+    let new_carry = cpu.registers.a & 0b1000_0000 != 0;
+
+    let mut new_value = cpu.registers.a.shl(1);
+    if cpu.registers.f.carry {
+        new_value = new_value | 1;
+    }
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+
+    cpu.registers.a = new_value;
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn rlca(cpu: &mut CPU) {
+    let (new_value, new_carry) = cpu.registers.a.overflowing_shl(1);
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.registers.a = new_value;
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
 // Tests
 #[cfg(test)]
 mod tests {
@@ -503,5 +571,47 @@ mod tests {
         cpu.program_counter = 0x0000;
         cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a, 0x00);
+    }
+
+    #[test]
+    fn rra() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RRA);
+        assert_eq!(cpu.registers.a, 0b1000_0000);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn rrca() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RRCA);
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn rla() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1000_0000;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RLA);
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn rlca() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1000_0000;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RLCA);
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.f.carry, false);
     }
 }
