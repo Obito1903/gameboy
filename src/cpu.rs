@@ -174,6 +174,11 @@ enum Instruction {
     SRA(ArithmeticTarget),
     SRL(ArithmeticTarget),
     SLA(ArithmeticTarget),
+
+    RR(ArithmeticTarget),
+    RRC(ArithmeticTarget),
+    RLC(ArithmeticTarget),
+    RL(ArithmeticTarget),
 }
 
 impl Instruction {
@@ -338,6 +343,11 @@ impl CPU {
             Instruction::SRA(target) => execute_and_resolve_set_target(self, sra, target),
             Instruction::SRL(target) => execute_and_resolve_set_target(self, srl, target),
             Instruction::SLA(target) => execute_and_resolve_set_target(self, sla, target),
+
+            Instruction::RR(target) => execute_and_resolve_set_target(self, rr, target),
+            Instruction::RRC(target) => execute_and_resolve_set_target(self, rrc, target),
+            Instruction::RLC(target) => execute_and_resolve_set_target(self, rlc, target),
+            Instruction::RL(target) => execute_and_resolve_set_target(self, rl, target),
 
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
@@ -671,6 +681,32 @@ fn rrca(cpu: &mut CPU) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+fn rrc(cpu: &mut CPU, value: u8) -> u8 {
+    let (new_value, new_carry) = value.overflowing_shr(1);
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+
+    new_value
+}
+
+fn rr(cpu: &mut CPU, value: u8) -> u8 {
+    let new_carry = value & 0b0000_0001 != 0;
+    let mut new_value = value.shr(1);
+    if cpu.registers.f.carry {
+        new_value = new_value | 0b1000_0000;
+    }
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
 fn rla(cpu: &mut CPU) {
     let new_carry = cpu.registers.a & 0b1000_0000 != 0;
 
@@ -687,6 +723,22 @@ fn rla(cpu: &mut CPU) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+fn rl(cpu: &mut CPU, value: u8) -> u8 {
+    let new_carry = cpu.registers.a & 0b1000_0000 != 0;
+
+    let mut new_value = value.shl(1);
+    if cpu.registers.f.carry {
+        new_value = new_value | 1;
+    }
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
 fn rlca(cpu: &mut CPU) {
     let (new_value, new_carry) = cpu.registers.a.overflowing_shl(1);
 
@@ -696,6 +748,17 @@ fn rlca(cpu: &mut CPU) {
     cpu.registers.a = new_value;
 
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn rlc(cpu: &mut CPU, value: u8) -> u8 {
+    let (new_value, new_carry) = value.overflowing_shl(1);
+
+    cpu.registers.f.zero = false;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
 }
 
 #[inline]
@@ -917,6 +980,7 @@ mod tests {
         assert_eq!(cpu.registers.f.carry, false);
     }
 
+    #[test]
     fn ccf() {
         let mut cpu = CPU::new();
         cpu.registers.f.carry = false;
@@ -969,5 +1033,46 @@ mod tests {
         cpu.execute(super::Instruction::SRL(super::ArithmeticTarget::A));
         assert_eq!(cpu.registers.a, 0b0000_0001);
         assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn rr() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RR(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b1000_0001);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn rrc() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RRC(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn rlc() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RLC(super::ArithmeticTarget::A));
+    }
+
+    #[test]
+    fn rl() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1000_0000;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::RL(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.f.carry, true)
     }
 }
