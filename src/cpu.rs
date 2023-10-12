@@ -157,6 +157,9 @@ enum Instruction {
     ADC(ArithmeticTarget),
     SUB(ArithmeticTarget),
     SBC(ArithmeticTarget),
+    CP(ArithmeticTarget),
+    INC(ArithmeticTarget),
+    DEC(ArithmeticTarget),
 }
 
 impl Instruction {
@@ -286,6 +289,21 @@ impl CPU {
             Instruction::ADDHL(target) => execute_and_resolve_2bytes(self, addhl, target),
             Instruction::SUB(target) => execute_and_resolve_target(self, sub, target),
             Instruction::SBC(target) => execute_and_resolve_target(self, sbc, target),
+            Instruction::CP(target) => execute_and_resolve_target(self, cp, target),
+            Instruction::INC(target) => match target {
+                ArithmeticTarget::BC
+                | ArithmeticTarget::DE
+                | ArithmeticTarget::HL
+                | ArithmeticTarget::SP => inc_2bytes(self, target),
+                _ => execute_and_resolve_set_target(self, inc, target),
+            },
+            Instruction::DEC(target) => match target {
+                ArithmeticTarget::BC
+                | ArithmeticTarget::DE
+                | ArithmeticTarget::HL
+                | ArithmeticTarget::SP => dec_2bytes(self, target),
+                _ => execute_and_resolve_set_target(self, dec, target),
+            }
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
             }
@@ -344,6 +362,33 @@ fn execute_and_resolve_target(cpu: &mut CPU, fonc: fn(&mut CPU, u8), target: Ari
         ArithmeticTarget::L => fonc(cpu, cpu.registers.l),
         ArithmeticTarget::HL => fonc(cpu, cpu.memory_bus.read_byte(cpu.registers.get_hl())),
         ArithmeticTarget::d8 => fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter)),
+        _ => {
+            panic!("ADD target {} not implemented", target)
+        }
+    }
+}
+fn execute_and_resolve_set_target(
+    cpu: &mut CPU,
+    fonc: fn(&mut CPU, u8) -> u8,
+    target: ArithmeticTarget,
+) {
+    match target {
+        ArithmeticTarget::A => cpu.registers.a = fonc(cpu, cpu.registers.a),
+        ArithmeticTarget::B => cpu.registers.b = fonc(cpu, cpu.registers.b),
+        ArithmeticTarget::C => cpu.registers.c = fonc(cpu, cpu.registers.c),
+        ArithmeticTarget::D => cpu.registers.d = fonc(cpu, cpu.registers.d),
+        ArithmeticTarget::E => cpu.registers.e = fonc(cpu, cpu.registers.e),
+        ArithmeticTarget::H => cpu.registers.h = fonc(cpu, cpu.registers.h),
+        ArithmeticTarget::L => cpu.registers.l = fonc(cpu, cpu.registers.l),
+        ArithmeticTarget::HL => {
+            let hl = cpu.registers.get_hl();
+            let res = fonc(cpu, cpu.memory_bus.read_byte(hl));
+            cpu.memory_bus.write_byte(hl, res);
+        }
+        ArithmeticTarget::d8 => {
+            let res = fonc(cpu, cpu.memory_bus.read_byte(cpu.program_counter));
+            cpu.memory_bus.write_byte(cpu.program_counter, res);
+        }
         _ => {
             panic!("ADD target {} not implemented", target)
         }
@@ -421,6 +466,7 @@ fn addhl(cpu: &mut CPU, value: u16) {
     cpu.registers.set_hl(new_value);
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
+
 fn sbc(cpu: &mut CPU, value: u8) {
     // A - C - B
     let (new_value, overflow) = cpu
@@ -434,6 +480,134 @@ fn sbc(cpu: &mut CPU, value: u8) {
 
     cpu.registers.a = new_value;
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+#[inline]
+fn cp(cpu: &mut CPU, value: u8) {
+    let (new_value, overflow) = cpu.registers.a.overflowing_sub(value);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = true;
+    cpu.registers.f.carry = overflow;
+    cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (value & 0xF) > 0xF;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+#[inline]
+fn inc(cpu: &mut CPU, target: u8) -> u8 {
+    let (result, carry_per_bit) = target.overflowing_add(1);
+    cpu.registers.f.zero = result == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.half_carry = carry_per_bit;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    result
+}
+
+#[inline]
+fn inchl(cpu: &mut CPU) {
+    let (new_value, overflow) = cpu.registers.get_hl().overflowing_add(1);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = overflow;
+
+    cpu.registers.set_hl(new_value);
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn inc_2bytes(cpu: &mut CPU, target: ArithmeticTarget) {
+    match target {
+        ArithmeticTarget::BC => {
+            let bc = cpu.registers.get_bc();
+            let res = inc_2bytes_impl(cpu, bc);
+            cpu.registers.set_bc(res);
+        }
+        ArithmeticTarget::DE => {
+            let de = cpu.registers.get_de();
+            let res = inc_2bytes_impl(cpu, de);
+            cpu.registers.set_de(res);
+        }
+        ArithmeticTarget::HL => {
+            let hl = cpu.registers.get_hl();
+            let res = inc_2bytes_impl(cpu, hl);
+            cpu.registers.set_hl(res);
+        }
+        ArithmeticTarget::SP => {
+            let sp = cpu.stack_pointer;
+            cpu.stack_pointer = inc_2bytes_impl(cpu, sp)
+        }
+        _ => {
+            panic!("INC target {} not implemented", target)
+        }
+    }
+}
+fn inc_2bytes_impl(cpu: &mut CPU, value: u16) -> u16 {
+    let (new_value, overflow) = value.overflowing_add(1);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = overflow;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
+//-----------
+#[inline]
+fn dec(cpu: &mut CPU, target: u8) -> u8 {
+    let (result, carry_per_bit) = target.overflowing_sub(1);
+    cpu.registers.f.zero = result == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.half_carry = carry_per_bit;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    result
+}
+
+#[inline]
+fn dechl(cpu: &mut CPU) {
+    let (new_value, overflow) = cpu.registers.get_hl().overflowing_sub(1);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = overflow;
+
+    cpu.registers.set_hl(new_value);
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+}
+
+fn dec_2bytes(cpu: &mut CPU, target: ArithmeticTarget) {
+    match target {
+        ArithmeticTarget::BC => {
+            let bc = cpu.registers.get_bc();
+            let res = dec_2bytes_impl(cpu, bc);
+            cpu.registers.set_bc(res);
+        }
+        ArithmeticTarget::DE => {
+            let de = cpu.registers.get_de();
+            let res = dec_2bytes_impl(cpu, de);
+            cpu.registers.set_de(res);
+        }
+        ArithmeticTarget::HL => {
+            let hl = cpu.registers.get_hl();
+            let res = dec_2bytes_impl(cpu, hl);
+            cpu.registers.set_hl(res);
+        }
+        ArithmeticTarget::SP => {
+            let sp = cpu.stack_pointer;
+            cpu.stack_pointer = dec_2bytes_impl(cpu, sp)
+        }
+        _ => {
+            panic!("INC target {} not implemented", target)
+        }
+    }
+}
+fn dec_2bytes_impl(cpu: &mut CPU, value: u16) -> u16 {
+    let (new_value, overflow) = value.overflowing_sub(1);
+    cpu.registers.f.zero = new_value == 0;
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = overflow;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
 }
 
 // Tests
@@ -503,5 +677,42 @@ mod tests {
         cpu.program_counter = 0x0000;
         cpu.execute(super::Instruction::SBC(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a, 0x00);
+    }
+    #[test]
+    fn cp() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.registers.c = 0x02;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::CP(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a, 0x03);
+    }
+
+    #[test]
+    fn inc() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::INC(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0x04);
+    }
+
+    #[test]
+    fn inc_bc(){
+        let mut cpu = CPU::new();
+        cpu.registers.set_bc(0x0001);
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::INC(super::ArithmeticTarget::BC));
+        assert_eq!(cpu.registers.get_bc(), 0x0002);
+    }
+
+    #[test]
+    fn dec()
+    {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x03;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::DEC(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0x02);
     }
 }
