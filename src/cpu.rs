@@ -168,6 +168,7 @@ enum Instruction {
     AND(ArithmeticTarget),
     OR(ArithmeticTarget),
     XOR(ArithmeticTarget),
+    SWAP(ArithmeticTarget),
 
     RRA,
     RRCA,
@@ -320,6 +321,7 @@ impl CPU {
             Instruction::AND(target) => execute_and_resolve_1byte(self, and, target),
             Instruction::OR(target) => execute_and_resolve_1byte(self, or, target),
             Instruction::XOR(target) => execute_and_resolve_1byte(self, xor, target),
+            Instruction::SWAP(target) => execute_and_resolve_set_target(self,  swap,target),
             Instruction::INC(target) => match target {
                 ArithmeticTarget::BC
                 | ArithmeticTarget::DE
@@ -744,6 +746,15 @@ fn xor(cpu: &mut CPU,value: u8){
     cpu.registers.f.carry=false;
     cpu.registers.f.half_carry=false;
 }
+fn swap(cpu: &mut CPU,value: u8) ->u8{
+    let b = value >> 4;
+    let c = value << 4;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=false;
+    cpu.program_counter=cpu.program_counter.wrapping_add(1);
+    b ^ c 
+}
 
 
 // Tests
@@ -944,5 +955,13 @@ mod tests {
         cpu.program_counter = 0x0000;
         cpu.execute(super::Instruction::XOR(super::ArithmeticTarget::C));
         assert_eq!(cpu.registers.a,0b0110);
+    }
+    #[test]
+    fn swap(){
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b11001010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SWAP(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a,0b10101100);
     }
 }
