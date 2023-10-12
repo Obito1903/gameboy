@@ -171,6 +171,9 @@ enum Instruction {
     RLCA,
     CCF,
     SCF,
+    SRA(ArithmeticTarget),
+    SRL(ArithmeticTarget),
+    SLA(ArithmeticTarget),
 }
 
 impl Instruction {
@@ -332,6 +335,9 @@ impl CPU {
             Instruction::RLCA => rlca(self),
             Instruction::CCF => ccf(self),
             Instruction::SCF => scf(self),
+            Instruction::SRA(target) => execute_and_resolve_set_target(self, sra, target),
+            Instruction::SRL(target) => execute_and_resolve_set_target(self, srl, target),
+            Instruction::SLA(target) => execute_and_resolve_set_target(self, sla, target),
 
             _ => {
                 panic!("Instruction {:?} not implemented", instruction)
@@ -715,6 +721,54 @@ fn scf(cpu: &mut CPU) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+// Shift n right into Carry. MSBit doesn't change.
+#[inline]
+fn sra(cpu: &mut CPU, n: u8) -> u8 {
+    let new_carry = n & 0b0000_0001 != 0;
+    let mut new_value = n.shr(1);
+
+    cpu.registers.f.zero = new_value == 0 as u8;
+
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.registers.f.half_carry = false;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
+//Shift n left into Carry. LSB of n set to 0
+#[inline]
+fn sla(cpu: &mut CPU, n: u8) -> u8 {
+    let new_carry = n & 0b1000_0000 != 0;
+    let mut new_value = n.shl(1);
+
+    cpu.registers.f.zero = new_value == 0 as u8;
+
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.registers.f.half_carry = false;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
+//Shift n right into Carry. MSB set to 0
+#[inline]
+fn srl(cpu: &mut CPU, n: u8) -> u8 {
+    let new_carry = n & 0b0000_0001 != 0;
+    let mut new_value = n.shr(1);
+
+    cpu.registers.f.zero = new_value == 0 as u8;
+
+    cpu.registers.f.subtract = false;
+    cpu.registers.f.carry = new_carry;
+    cpu.registers.f.half_carry = false;
+
+    cpu.program_counter = cpu.program_counter.wrapping_add(1);
+    new_value
+}
+
 // Tests
 #[cfg(test)]
 mod tests {
@@ -886,5 +940,34 @@ mod tests {
         assert_eq!(cpu.registers.f.carry, true);
         assert_eq!(cpu.registers.f.half_carry, false);
         assert_eq!(cpu.registers.f.subtract, false);
+    }
+    #[test]
+    fn sra() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SRA(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn sla() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SLA(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b0000_0100);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn srl() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::SRL(super::ArithmeticTarget::A));
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.registers.f.carry, false);
     }
 }
