@@ -165,6 +165,10 @@ enum Instruction {
     INC(ArithmeticTarget),
     DEC(ArithmeticTarget),
 
+    AND(ArithmeticTarget),
+    OR(ArithmeticTarget),
+    XOR(ArithmeticTarget),
+
     RRA,
     RRCA,
     RLA,
@@ -312,6 +316,10 @@ impl CPU {
             Instruction::SUB(target) => execute_and_resolve_1byte(self, sub, target),
             Instruction::SBC(target) => execute_and_resolve_1byte(self, sbc, target),
             Instruction::CP(target) => execute_and_resolve_1byte(self, cp, target),
+
+            Instruction::AND(target) => execute_and_resolve_1byte(self, and, target),
+            Instruction::OR(target) => execute_and_resolve_1byte(self, or, target),
+            Instruction::XOR(target) => execute_and_resolve_1byte(self, xor, target),
             Instruction::INC(target) => match target {
                 ArithmeticTarget::BC
                 | ArithmeticTarget::DE
@@ -715,6 +723,29 @@ fn scf(cpu: &mut CPU) {
     cpu.program_counter = cpu.program_counter.wrapping_add(1);
 }
 
+fn and(cpu: &mut CPU,value: u8){
+    cpu.registers.a &= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=true;
+}
+fn or(cpu: &mut CPU,value: u8){
+    cpu.registers.a |= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=false;
+}
+fn xor(cpu: &mut CPU,value: u8){
+    cpu.registers.a ^= value;
+    cpu.registers.f.zero = cpu.registers.a == 0;
+    cpu.registers.f.subtract=false;
+    cpu.registers.f.carry=false;
+    cpu.registers.f.half_carry=false;
+}
+
+
 // Tests
 #[cfg(test)]
 mod tests {
@@ -886,5 +917,32 @@ mod tests {
         assert_eq!(cpu.registers.f.carry, true);
         assert_eq!(cpu.registers.f.half_carry, false);
         assert_eq!(cpu.registers.f.subtract, false);
+    }
+    #[test]
+    fn and(){
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::AND(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b1000);
+    }
+    #[test]
+    fn or(){
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::OR(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b1110);
+    }
+    #[test]
+    fn xor(){
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1100;
+        cpu.registers.c = 0b1010;
+        cpu.program_counter = 0x0000;
+        cpu.execute(super::Instruction::XOR(super::ArithmeticTarget::C));
+        assert_eq!(cpu.registers.a,0b0110);
     }
 }
