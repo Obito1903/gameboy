@@ -1351,7 +1351,13 @@ impl Instruction {
             Self::CP(source) => Self::cp(cpu, *source),
             Self::CPL => Self::cpl(cpu),
             Self::RL(target) => Self::rl(cpu, *target),
+            Self::RLA => Self::rla(cpu),
+            Self::RLC(target) => Self::rlc(cpu, *target),
+            Self::RLCA => Self::rlca(cpu),
             Self::RR(target) => Self::rr(cpu, *target),
+            Self::RRA => Self::rra(cpu),
+            Self::RRC(target) => Self::rrc(cpu, *target),
+            Self::RRCA => Self::rrca(cpu),
             Self::NOP => 4,
             Self::STOP => 4,
             _ => 0,
@@ -1590,10 +1596,6 @@ impl Instruction {
             _ => panic!("RL is only available for bytes targets"),
         };
 
-        if cpu.registers.f.carry {
-            new_value = new_value | 0b0000_0001;
-        }
-
         target.set(cpu, TargetSize::Byte(new_value));
 
         cpu.registers.f.zero = false;
@@ -1603,21 +1605,59 @@ impl Instruction {
     }
 
     fn rla(cpu: &mut CPU) -> u8 {
-        todo!("RLA not implemented")
+        let cycle = 4;
+
+        let (new_carry, mut new_value) = {
+            let new_value = cpu.registers.a << 1;
+            (cpu.registers.a & 0b1000_0000 != 0, new_value)
+        };
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rlc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RLC not implemented")
+        let cycle = 8;
+
+        let (mut new_value, new_carry) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => target_value.overflowing_shl(1),
+            _ => panic!("RLC is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b0000_0001;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rlca(cpu: &mut CPU) -> u8 {
-        todo!("RLCA not implemented")
+        let cycle = 4;
+
+        let (mut new_value, new_carry) = cpu.registers.a.overflowing_shl(1);
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b0000_0001;
+        }
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rr(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
 
-        let (new_carry, mut new_value) = match target.get(cpu) {
+        let (new_carry, new_value) = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
                 let new_value = target_value >> 1;
                 (target_value & 0b0000_0001 != 0, new_value)
@@ -1625,9 +1665,6 @@ impl Instruction {
             _ => panic!("RR is only available for bytes targets"),
         };
 
-        if cpu.registers.f.carry {
-            new_value = new_value | 0b1000_0000;
-        }
 
         target.set(cpu, TargetSize::Byte(new_value));
 
@@ -1638,15 +1675,52 @@ impl Instruction {
     }
 
     fn rra(cpu: &mut CPU) -> u8 {
-        todo!("RRA not implemented")
+        let cycle = 4;
+
+        let (new_carry, new_value) = {
+            let new_value = cpu.registers.a >> 1;
+            (cpu.registers.a & 0b0000_0001 != 0, new_value)
+        };
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rrc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RRC not implemented")
+        let cycle = 8;
+
+        let (mut new_value, new_carry) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => (target_value.overflowing_shr(1)),
+            _ => panic!("RRC is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b1000_0000;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rrca(cpu: &mut CPU) -> u8 {
-        todo!("RRCA not implemented")
+        let cycle = 4;
+
+        let (mut new_value, new_carry) = cpu.registers.a.overflowing_shr(1);
+        
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b1000_0000;
+        }
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rst(cpu: &mut CPU, address: OperandTypes) -> u8 {
