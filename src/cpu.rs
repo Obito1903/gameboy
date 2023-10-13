@@ -1669,7 +1669,22 @@ impl Instruction {
 
     #[inline]
     fn res(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("RES not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = !(1 << bit);
+                 let new_value = target_value & bitmask;
+                 target.set(cpu, TargetSize::Byte(new_value));
+                  8
+            },
+            TargetSize::Word(target_value) => {
+                let bitmask = !(1 << bit);
+                 let new_value = target_value & bitmask;
+                 target.set(cpu, TargetSize::Word(new_value));
+                  16
+            },
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
     #[inline]
@@ -1739,7 +1754,22 @@ impl Instruction {
 
     #[inline]
     fn set(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("SET not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = 1 << bit;
+                 let new_value = target_value | bitmask;
+                 target.set(cpu, TargetSize::Byte(new_value));
+                  8
+            },
+            TargetSize::Word(target_value) => {
+                let bitmask = 1 << bit;
+                 let new_value = target_value | bitmask;
+                 target.set(cpu, TargetSize::Word(new_value));
+                  16
+            },
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
     #[inline]
