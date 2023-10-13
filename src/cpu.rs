@@ -374,8 +374,8 @@ enum Instruction {
     LD(OperandTypes, OperandTypes),
     NOP,
     OR(OperandTypes),
-    POP(OperandTypes),
-    PUSH(OperandTypes),
+    POP(RegisterPair),
+    PUSH(RegisterPair),
     RES(u8, OperandTypes),
     RET(Option<FlagOperand>),
     RETI,
@@ -388,7 +388,7 @@ enum Instruction {
     RRC(OperandTypes),
     RRCA,
     RST(OperandTypes),
-    SBC(OperandTypes, OperandTypes),
+    SBC(OperandTypes),
     SCF,
     SET(u8, OperandTypes),
     SLA(OperandTypes),
@@ -883,38 +883,14 @@ impl Instruction {
             0x95 => Self::SUB(OperandTypes::Register(RegisterName::L)),
             0x96 => Self::SUB(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0x97 => Self::SUB(OperandTypes::Register(RegisterName::A)),
-            0x98 => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::B),
-            ),
-            0x99 => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::C),
-            ),
-            0x9A => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::D),
-            ),
-            0x9B => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::E),
-            ),
-            0x9C => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::H),
-            ),
-            0x9D => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::L),
-            ),
-            0x9E => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Memory(RegisterPair::HL.get(cpu)),
-            ),
-            0x9F => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::A),
-            ),
+            0x98 => Self::SBC(OperandTypes::Register(RegisterName::B)),
+            0x99 => Self::SBC(OperandTypes::Register(RegisterName::C)),
+            0x9A => Self::SBC(OperandTypes::Register(RegisterName::D)),
+            0x9B => Self::SBC(OperandTypes::Register(RegisterName::E)),
+            0x9C => Self::SBC(OperandTypes::Register(RegisterName::H)),
+            0x9D => Self::SBC(OperandTypes::Register(RegisterName::L)),
+            0x9E => Self::SBC(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
+            0x9F => Self::SBC(OperandTypes::Register(RegisterName::A)),
             0xA0 => Self::AND(OperandTypes::Register(RegisterName::B)),
             0xA1 => Self::AND(OperandTypes::Register(RegisterName::C)),
             0xA2 => Self::AND(OperandTypes::Register(RegisterName::D)),
@@ -948,7 +924,7 @@ impl Instruction {
             0xBE => Self::CP(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0xBF => Self::CP(OperandTypes::Register(RegisterName::A)),
             0xC0 => Self::RET(Some(FlagOperand::NZ)),
-            0xC1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC1 => Self::POP(RegisterPair::BC),
             0xC2 => Self::JP(
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -958,7 +934,7 @@ impl Instruction {
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xC5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC5 => Self::PUSH(RegisterPair::BC),
             0xC6 => Self::ADD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
@@ -981,7 +957,7 @@ impl Instruction {
             ),
             0xCF => Self::RST(OperandTypes::D8(0x08)),
             0xD0 => Self::RET(Some(FlagOperand::NC)),
-            0xD1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD1 => Self::POP(RegisterPair::DE),
             0xD2 => Self::JP(
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -990,7 +966,7 @@ impl Instruction {
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xD5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD5 => Self::PUSH(RegisterPair::DE),
             0xD6 => Self::SUB(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xD7 => Self::RST(OperandTypes::D8(0x10)),
             0xD8 => Self::RET(Some(FlagOperand::Carry)),
@@ -1003,21 +979,18 @@ impl Instruction {
                 Some(FlagOperand::Carry),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xDE => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
-            ),
+            0xDE => Self::SBC(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xDF => Self::RST(OperandTypes::D8(0x18)),
             0xE0 => Self::LD(
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE1 => Self::POP(RegisterPair::HL),
             0xE2 => Self::LD(
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE5 => Self::PUSH(RegisterPair::HL),
             0xE6 => Self::AND(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xE7 => Self::RST(OperandTypes::D8(0x20)),
             0xE8 => Self::ADD(
@@ -1035,13 +1008,13 @@ impl Instruction {
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
             ),
-            0xF1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF1 => Self::POP(RegisterPair::AF),
             0xF2 => Self::LD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
             ),
             0xF3 => Self::DI,
-            0xF5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF5 => Self::PUSH(RegisterPair::AF),
             0xF6 => Self::OR(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xF7 => Self::RST(OperandTypes::D8(0x30)),
             0xF8 => Self::LD(
@@ -1407,7 +1380,7 @@ impl Instruction {
             Self::RRC(_) => 2,
             Self::RRCA => 1,
             Self::RST(_) => 1,
-            Self::SBC(_, source) => match source {
+            Self::SBC(source) => match source {
                 OperandTypes::D8(_) => 2,
                 _ => 1,
             },
@@ -1467,7 +1440,7 @@ impl Instruction {
             Self::RRC(target) => Self::rrc(cpu, *target),
             Self::RRCA => Self::rrca(cpu),
             Self::RST(address) => Self::rst(cpu, *address),
-            Self::SBC(target, source) => Self::sbc(cpu, *target, *source),
+            Self::SBC(source) => Self::sbc(cpu, *source),
             Self::SCF => Self::scf(cpu),
             Self::SET(bit, target) => Self::set(cpu, *bit, *target),
             Self::SLA(target) => Self::sla(cpu, *target),
@@ -1615,17 +1588,37 @@ impl Instruction {
 
     #[inline]
     fn ccf(cpu: &mut CPU) -> u8 {
-        todo!("CCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = !cpu.registers.f.carry;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
+    ///Subtracts from the 8-bit A register, the 8-bit register r, and updates flags based on the result.
     #[inline]
     fn cp(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("CP not implemented")
+        let cycle = 8;
+        let (zero, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu.registers.a.overflowing_sub(source_value);
+                ((new_value == 0), overflow)
+            }
+            _ => panic!("This instruction is only available for bytes"),
+        };
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     #[inline]
     fn cpl(cpu: &mut CPU) -> u8 {
-        todo!("CPL not implemented")
+        let cycle = 4;
+        cpu.registers.a = !cpu.registers.a;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.half_carry = true;
+        cycle
     }
 
     #[inline]
@@ -1635,7 +1628,24 @@ impl Instruction {
 
     #[inline]
     fn dec(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("DEC not implemented")
+        let cycle = 4;
+        let (zero, overflow) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_sub(1);
+                target.set(cpu, TargetSize::Byte(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Word(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_sub(1);
+                target.set(cpu, TargetSize::Word(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Bit(_) => panic!("Cannot DEC bit"),
+        };
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     #[inline]
@@ -1657,7 +1667,27 @@ impl Instruction {
 
     #[inline]
     fn inc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("INC not implemented")
+        let cycle = 4;
+
+        let (zero, overflow) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_add(1);
+                target.set(cpu, TargetSize::Byte(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Word(target_value) => {
+                let (new_value, overflow) = target_value.overflowing_add(1);
+                target.set(cpu, TargetSize::Word(new_value));
+                ((new_value == 0), overflow)
+            }
+            TargetSize::Bit(_) => panic!("Cannot INC bit"),
+        };
+
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = overflow;
+
+        cycle
     }
 
     #[inline]
@@ -1686,18 +1716,36 @@ impl Instruction {
     }
 
     #[inline]
-    fn pop(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("POP not implemented")
+    fn pop(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        let value = cpu.pop_word();
+        target.set(cpu, value);
+        12
     }
 
     #[inline]
-    fn push(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("PUSH not implemented")
+    fn push(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        cpu.push_word(target.get(cpu));
+        16
     }
 
     #[inline]
     fn res(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("RES not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = !(1 << bit);
+                let new_value = target_value & bitmask;
+                target.set(cpu, TargetSize::Byte(new_value));
+                8
+            }
+            TargetSize::Word(target_value) => {
+                let bitmask = !(1 << bit);
+                let new_value = target_value & bitmask;
+                target.set(cpu, TargetSize::Word(new_value));
+                16
+            }
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
     #[inline]
@@ -1712,42 +1760,147 @@ impl Instruction {
 
     #[inline]
     fn rl(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RL not implemented")
+        let cycle = 8;
+
+        let (new_carry, mut new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_value = target_value << 1;
+                (target_value & 0b1000_0000 != 0, new_value)
+            }
+            _ => panic!("RL is only available for bytes targets"),
+        };
+
+        target.set(cpu, TargetSize::Byte(new_value));
+
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rla(cpu: &mut CPU) -> u8 {
-        todo!("RLA not implemented")
+        let cycle = 4;
+
+        let (new_carry, mut new_value) = {
+            let new_value = cpu.registers.a << 1;
+            (cpu.registers.a & 0b1000_0000 != 0, new_value)
+        };
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rlc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RLC not implemented")
+        let cycle = 8;
+
+        let (mut new_value, new_carry) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => target_value.overflowing_shl(1),
+            _ => panic!("RLC is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b0000_0001;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rlca(cpu: &mut CPU) -> u8 {
-        todo!("RLCA not implemented")
+        let cycle = 4;
+
+        let (mut new_value, new_carry) = cpu.registers.a.overflowing_shl(1);
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b0000_0001;
+        }
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rr(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RR not implemented")
+        let cycle = 8;
+
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_value = target_value >> 1;
+                (target_value & 0b0000_0001 != 0, new_value)
+            }
+            _ => panic!("RR is only available for bytes targets"),
+        };
+
+        target.set(cpu, TargetSize::Byte(new_value));
+
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rra(cpu: &mut CPU) -> u8 {
-        todo!("RRA not implemented")
+        let cycle = 4;
+
+        let (new_carry, new_value) = {
+            let new_value = cpu.registers.a >> 1;
+            (cpu.registers.a & 0b0000_0001 != 0, new_value)
+        };
+
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rrc(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RRC not implemented")
+        let cycle = 8;
+
+        let (mut new_value, new_carry) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => target_value.overflowing_shr(1),
+            _ => panic!("RRC is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b1000_0000;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
     fn rrca(cpu: &mut CPU) -> u8 {
-        todo!("RRCA not implemented")
+        let cycle = 4;
+
+        let (mut new_value, new_carry) = cpu.registers.a.overflowing_shr(1);
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b1000_0000;
+        }
+        cpu.registers.a = new_value;
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
@@ -1756,33 +1909,118 @@ impl Instruction {
     }
 
     #[inline]
-    fn sbc(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
-        todo!("SBC not implemented")
+    fn sbc(cpu: &mut CPU, source: OperandTypes) -> u8 {
+        let (new_value, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu
+                    .registers
+                    .a
+                    .overflowing_sub(cpu.registers.f.carry as u8 + source_value);
+                (new_value, overflow)
+            }
+            _ => panic!("SBC only available for bytes sources"),
+        };
+
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        let old_val = match source.get(cpu) {
+            TargetSize::Byte(source_value) => source_value,
+            _ => panic!("SBC only available for bytes sources"),
+        };
+
+        cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (old_val & 0xF) > 0xF;
+
+        cpu.registers.a = new_value;
+        match source {
+            OperandTypes::D8(_) => 8,
+            _ => 4,
+        }
     }
 
     #[inline]
     fn scf(cpu: &mut CPU) -> u8 {
-        todo!("SCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = true;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
     #[inline]
     fn set(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("SET not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = 1 << bit;
+                let new_value = target_value | bitmask;
+                target.set(cpu, TargetSize::Byte(new_value));
+                8
+            }
+            TargetSize::Word(target_value) => {
+                let bitmask = 1 << bit;
+                let new_value = target_value | bitmask;
+                target.set(cpu, TargetSize::Word(new_value));
+                16
+            }
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
+    ///Shift n left into Carry. LSB of target set to 0
     #[inline]
     fn sla(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SLA not implemented")
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b1000_0000 != 0;
+                let new_value = target_value << 1;
+                (new_carry, new_value)
+            }
+            _ => panic!("SLA is only available for bytes targets"),
+        };
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        8
     }
 
+    /// Shift n right into Carry.
     #[inline]
     fn sra(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SRA not implemented")
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b0000_0001 != 0;
+                let new_value = target_value >> 1;
+                (new_carry, new_value)
+            }
+            _ => panic!("SRA is only available for bytes targets"),
+        };
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        8
     }
 
     #[inline]
     fn srl(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SRL not implemented")
+        let cycle = 8;
+
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b0000_0001 != 0;
+                let new_value = target_value >> 1;
+                (new_carry, new_value)
+            }
+            _ => panic!("SRL is only available for bytes targets"),
+        };
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
@@ -1792,7 +2030,21 @@ impl Instruction {
 
     #[inline]
     fn sub(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("SUB not implemented")
+        let cycle = 8;
+
+        let (zero, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu.registers.a.overflowing_sub(source_value);
+                cpu.registers.a = new_value;
+                ((new_value == 0), overflow)
+            }
+            _ => panic!("SUB only available for bytes sources"),
+        };
+
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     #[inline]
