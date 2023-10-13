@@ -52,6 +52,7 @@ impl std::convert::From<u8> for FlagsRegister {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct InteruptsFlags {
     pub v_blank: bool,
     pub lcd_stat: bool,
@@ -96,6 +97,36 @@ impl std::convert::From<u8> for InteruptsFlags {
             timer,
             serial,
             joypad,
+        }
+    }
+}
+
+pub struct JoypadFlags {
+    pub buttons: bool,
+    pub direction: bool,
+    pub a: bool,
+    pub b: bool,
+    pub select: bool,
+    pub start: bool,
+    pub right: bool,
+    pub left: bool,
+    pub up: bool,
+    pub down: bool,
+}
+
+impl JoypadFlags {
+    fn new() -> Self {
+        Self {
+            buttons: false,
+            direction: false,
+            a: false,
+            b: false,
+            select: false,
+            start: false,
+            right: false,
+            left: false,
+            up: false,
+            down: false,
         }
     }
 }
@@ -1561,12 +1592,9 @@ impl Instruction {
             let address = match address {
                 OperandTypes::D16(address) => address,
                 OperandTypes::A16(address) => address,
-
                 _ => panic!("CALL only available for 16 bits addresses"),
             };
-            // cpu.stack_pointer -= 1;
-            cpu.push_word(cpu.program_counter);
-            cpu.program_counter = address;
+            cpu.call(address);
         };
 
         match condition {
@@ -1778,73 +1806,127 @@ impl Instruction {
     }
 }
 
-pub enum InteruptEnableRegister {
-    VBlank,
-    LCDStat,
-    Timer,
-    Serial,
-    Joypad,
+#[derive(Debug, Clone, Copy)]
+pub enum JoypadButton {
+    A,
+    B,
+    Select,
+    Start,
+    Right,
+    Left,
+    Up,
+    Down,
 }
 
 pub struct MemoryBus {
-    pub memory: [u8; 0xFFFF],
+    pub memory: [u8; 0x10000],
+    pub interupt_enable: InteruptsFlags,
+    pub interupt_flags: InteruptsFlags,
+    pub joypad_flags: JoypadFlags,
 }
 
 impl MemoryBus {
     fn new() -> Self {
         Self {
-            memory: [0; 0xFFFF],
+            memory: [0; 0x10000],
+            interupt_enable: InteruptsFlags::new(),
+            interupt_flags: InteruptsFlags::new(),
+            joypad_flags: JoypadFlags::new(),
         }
     }
 
+    #[inline]
     pub fn read_byte(&self, address: u16) -> u8 {
-        self.memory[address as usize]
+        match address {
+            0x0000..=0x3FFF => self.memory[address as usize],
+            0x4000..=0x7FFF => match self.read_byte(0x0147) {
+                0x00 => self.memory[address as usize],
+                _ => todo!("Banked ROM not implemented"),
+            },
+            0x8000..=0x9FFF => self.memory[address as usize],
+            0xA000..=0xBFFF => self.memory[address as usize],
+            0xE000..=0xFDFF => self.read_byte(address - 0x2000),
+            0xFE00..=0xFEFF => self.memory[address as usize],
+            0xFF00 => self.read_joypad(),
+            0xFF01 => todo!("SB: Serial transfer data"),
+            0xFF02 => todo!("SC: Serial transfer control"),
+            0xFF04 => todo!("DIV: Divider register"),
+            0xFF05 => todo!("TIMA: Time counter"),
+            0xFF06 => todo!("TMA: Timer Module"),
+            0xFF07 => todo!("TAC: Timer control"),
+            0xFF0F => self.interupt_flags.into(),
+            0xFF80..=0xFFFE => self.memory[address as usize],
+            0xFFFF => self.interupt_enable.into(),
+            address => {
+                eprintln!(
+                    "Address {:#06x?} probably not implemented corrctly",
+                    address
+                );
+                self.memory[address as usize]
+            }
+        }
     }
 
+    #[inline]
     pub fn read_word(&self, address: u16) -> u16 {
         (self.read_byte(address) as u16) << 8 | self.read_byte(address + 1) as u16
     }
 
+    #[inline]
     fn read_next_byte(&self, current: u16) -> u8 {
         self.read_byte(current + 1)
     }
 
+    #[inline]
     pub fn write_byte(&mut self, addr: u16, byte: u8) {
-        self.memory[addr as usize] = byte;
+        match addr {
+            0x0000..=0xDFFF => self.memory[addr as usize] = byte,
+            0xE000..=0xFDFF => self.write_byte(addr - 0x2000, byte),
+            0xFE00..=0xFEFF => self.memory[addr as usize] = byte,
+            0xFF00 => self.write_joypad(byte),
+            0xFF04 => todo!("DIV: Divider register"),
+            0xFF05 => todo!("TIMA: Time counter"),
+            0xFF06 => todo!("TMA: Timer Module"),
+            0xFF07 => todo!("TAC: Timer control"),
+            0xFF0F => self.interupt_flags = InteruptsFlags::from(byte),
+            0xFF80..=0xFFFE => self.memory[addr as usize] = byte,
+            0xFFFF => self.interupt_enable = InteruptsFlags::from(byte),
+            addr => {
+                eprintln!("Address {:#06x?} probably not implemented corrctly", addr);
+                self.memory[addr as usize] = byte;
+            }
+        }
     }
+
+    #[inline]
     pub fn write_word(&mut self, addr: u16, word: u16) {
         self.write_byte(addr, (word >> 8) as u8);
         self.write_byte(addr + 1, word as u8);
     }
 
-    pub fn read_interupt_enable(&self, interupt: InteruptEnableRegister) -> bool {
-        let register = self.read_byte(0xFFFF);
-        match interupt {
-            InteruptEnableRegister::VBlank => register & 0b0000_0001 != 0,
-            InteruptEnableRegister::LCDStat => register & 0b0000_0010 != 0,
-            InteruptEnableRegister::Timer => register & 0b0000_0100 != 0,
-            InteruptEnableRegister::Serial => register & 0b0000_1000 != 0,
-            InteruptEnableRegister::Joypad => register & 0b0001_0000 != 0,
+    fn read_joypad(&self) -> u8 {
+        if self.joypad_flags.buttons {
+            (if self.joypad_flags.a { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.b { 0 } else { 1 } << 1)
+                | (if self.joypad_flags.select { 0 } else { 1 } << 2)
+                | (if self.joypad_flags.start { 0 } else { 1 } << 3)
+        } else if self.joypad_flags.direction {
+            (if self.joypad_flags.a { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.right { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.left { 0 } else { 1 } << 1)
+                | (if self.joypad_flags.up { 0 } else { 1 } << 2)
+                | (if self.joypad_flags.down { 0 } else { 1 } << 3)
+        } else {
+            0b0011_1111
         }
     }
 
-    pub fn write_interupt_enable(&mut self, interupt: InteruptEnableRegister, value: bool) {
-        match interupt {
-            InteruptEnableRegister::VBlank => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1110) | (value as u8)
-            }
-            InteruptEnableRegister::LCDStat => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1101) | ((value as u8) << 1)
-            }
-            InteruptEnableRegister::Timer => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1011) | ((value as u8) << 2)
-            }
-            InteruptEnableRegister::Serial => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_0111) | ((value as u8) << 3)
-            }
-            InteruptEnableRegister::Joypad => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1110_1111) | ((value as u8) << 4)
-            }
+    fn write_joypad(&mut self, value: u8) {
+        // extract buttons flag
+        if ((value >> 4) & 0b1) == 0 {
+            self.joypad_flags.direction = true;
+        } else if ((value >> 5) & 0b1) == 0 {
+            self.joypad_flags.buttons = true;
         }
     }
 }
@@ -1854,7 +1936,6 @@ pub struct CPU {
     pub program_counter: u16,
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
-    pub iterupts_flags: InteruptsFlags,
     pub memory_bus: MemoryBus,
 }
 
@@ -1865,15 +1946,16 @@ impl CPU {
             program_counter: 0,
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
-            iterupts_flags: InteruptsFlags::new(),
             memory_bus: MemoryBus::new(),
         }
     }
 
+    #[inline]
     fn advance_pc(&mut self, nb_bytes: u8) {
         self.program_counter += nb_bytes as u16;
     }
 
+    #[inline]
     fn read_instruction(&mut self) -> Option<u8> {
         let instruction = Instruction::from_byte(self, self.program_counter);
         match instruction {
@@ -1889,50 +1971,41 @@ impl CPU {
         }
     }
 
+    #[inline]
+    pub fn handle_interupt(&mut self) {
+        if self.interupt_master_enable {
+            if self.memory_bus.interupt_enable.v_blank && self.memory_bus.interupt_flags.v_blank {
+                self.call(0x40);
+                self.memory_bus.interupt_flags.v_blank = false;
+            } else if self.memory_bus.interupt_enable.lcd_stat
+                && self.memory_bus.interupt_flags.lcd_stat
+            {
+                self.call(0x48);
+                self.memory_bus.interupt_flags.lcd_stat = false;
+            } else if self.memory_bus.interupt_enable.timer && self.memory_bus.interupt_flags.timer
+            {
+                self.call(0x50);
+                self.memory_bus.interupt_flags.timer = false;
+            } else if self.memory_bus.interupt_enable.serial
+                && self.memory_bus.interupt_flags.serial
+            {
+                self.call(0x58);
+                self.memory_bus.interupt_flags.serial = false;
+            } else if self.memory_bus.interupt_enable.joypad
+                && self.memory_bus.interupt_flags.joypad
+            {
+                self.call(0x60);
+                self.memory_bus.interupt_flags.joypad = false;
+            }
+        }
+    }
+
     pub fn run(&mut self, mhz: f32) {
         let cycles_per_second = mhz * 1_000_000.0;
 
         loop {
             // handle interupts
-            if self.interupt_master_enable {
-                if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::VBlank)
-                    && self.iterupts_flags.v_blank
-                {
-                    self.iterupts_flags.v_blank = false;
-                    todo!("VBlank interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::LCDStat)
-                    && self.iterupts_flags.lcd_stat
-                {
-                    self.iterupts_flags.lcd_stat = false;
-                    todo!("LCDStat interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Timer)
-                    && self.iterupts_flags.timer
-                {
-                    self.iterupts_flags.timer = false;
-                    todo!("Timer interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Serial)
-                    && self.iterupts_flags.serial
-                {
-                    self.iterupts_flags.serial = false;
-                    todo!("Serial interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Joypad)
-                    && self.iterupts_flags.joypad
-                {
-                    self.iterupts_flags.joypad = false;
-                    todo!("Joypad interupt not implemented")
-                }
-            }
-
+            self.handle_interupt();
             match self.read_instruction() {
                 Some(cycles) => {
                     let seconds = cycles as f32 / cycles_per_second;
@@ -1966,8 +2039,9 @@ impl CPU {
         todo!("Jump not implemented")
     }
 
-    fn call(&mut self, should_call: bool) -> u16 {
-        todo!("Call not implemented")
+    pub fn call(&mut self, address: u16) {
+        self.push_word(self.program_counter);
+        self.program_counter = address;
     }
 
     fn ret(&mut self, should_return: bool) -> u16 {

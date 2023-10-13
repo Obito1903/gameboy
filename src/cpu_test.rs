@@ -144,4 +144,20 @@ mod cpu_tests {
         assert_eq!(cpu.stack_pointer, 0xFFFD);
         assert_eq!(cpu.memory_bus.read_word(0xFFFD), 0x0003);
     }
+
+    #[test]
+    fn interupt_joy() {
+        let mut cpu = CPU::new();
+        cpu.program_counter = 0x0000;
+        cpu.interupt_master_enable = true;
+        cpu.memory_bus.write_byte(0x0000, 0xFB);
+        cpu.memory_bus.interupt_flags.joypad = true;
+        cpu.memory_bus.interupt_enable.joypad = true;
+        // Stop instruction at interupt vector
+        cpu.memory_bus.write_byte(0x0060, 0x10);
+        cpu.memory_bus.write_byte(0x0061, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.program_counter, 0x0061);
+        assert_eq!(cpu.interupt_master_enable, true);
+    }
 }
