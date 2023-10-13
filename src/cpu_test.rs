@@ -646,4 +646,5 @@ mod cpu_tests {
         assert_eq!(cpu.registers.f.half_carry, false);
         assert_eq!(cpu.registers.f.carry, true);
     }
+
 }
