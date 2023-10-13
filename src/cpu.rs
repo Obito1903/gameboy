@@ -1587,7 +1587,11 @@ impl Instruction {
 
     #[inline]
     fn ccf(cpu: &mut CPU) -> u8 {
-        todo!("CCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = !cpu.registers.f.carry;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
     ///Subtracts from the 8-bit A register, the 8-bit register r, and updates flags based on the result.
@@ -1908,7 +1912,11 @@ impl Instruction {
 
     #[inline]
     fn scf(cpu: &mut CPU) -> u8 {
-        todo!("SCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = true;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
     #[inline]
