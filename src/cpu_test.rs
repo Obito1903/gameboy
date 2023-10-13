@@ -106,7 +106,7 @@ mod cpu_tests {
     fn cp() {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
-        cpu.registers.c = 0x02;
+        cpu.registers.b = 0x02;
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xB8);
         cpu.memory_bus.write_byte(0x0001, 0x10);
@@ -130,7 +130,7 @@ mod cpu_tests {
     fn cp_zero() {
         let mut cpu = CPU::new();
         cpu.registers.a = 0x01;
-        cpu.registers.c = 0x01;
+        cpu.registers.b = 0x01;
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xB8);
         cpu.memory_bus.write_byte(0x0001, 0x10);
@@ -207,9 +207,27 @@ mod cpu_tests {
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xCB);
         cpu.memory_bus.write_byte(0x0001, 0x10);
+
         cpu.memory_bus.write_byte(0x0002, 0x10);
         cpu.run(4.194304);
-        assert_eq!(cpu.registers.a, 0b0000_000);  
+        assert_eq!(cpu.registers.b, 0b0000_0001);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+    #[test]
+    fn rr() {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x18);
+
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b1000_0000);
         assert_eq!(cpu.registers.f.zero, false);
         assert_eq!(cpu.registers.f.subtract, false);
         assert_eq!(cpu.registers.f.half_carry, false);

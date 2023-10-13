@@ -1351,6 +1351,7 @@ impl Instruction {
             Self::CP(source) => Self::cp(cpu, *source),
             Self::CPL => Self::cpl(cpu),
             Self::RL(target) => Self::rl(cpu, *target),
+            Self::RR(target) => Self::rr(cpu, *target),
             Self::NOP => 4,
             Self::STOP => 4,
             _ => 0,
@@ -1580,21 +1581,21 @@ impl Instruction {
 
     fn rl(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
-        let new_carry = cpu.registers.a & 0b1000_0000 != 0;
 
-        let mut new_value = match target.get(cpu) {
+        let (new_carry, mut new_value) = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
                 let new_value = target_value << 1;
-                new_value
+                (target_value & 0b1000_0000 != 0, new_value)
             }
             _ => panic!("RL is only available for bytes targets"),
         };
 
         if cpu.registers.f.carry {
-            new_value = new_value | 1;
+            new_value = new_value | 0b0000_0001;
         }
 
         target.set(cpu, TargetSize::Byte(new_value));
+
         cpu.registers.f.zero = false;
         cpu.registers.f.subtract = false;
         cpu.registers.f.carry = new_carry;
@@ -1614,7 +1615,26 @@ impl Instruction {
     }
 
     fn rr(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("RR not implemented")
+        let cycle = 8;
+
+        let (new_carry, mut new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_value = target_value >> 1;
+                (target_value & 0b0000_0001 != 0, new_value)
+            }
+            _ => panic!("RR is only available for bytes targets"),
+        };
+
+        if cpu.registers.f.carry {
+            new_value = new_value | 0b1000_0000;
+        }
+
+        target.set(cpu, TargetSize::Byte(new_value));
+
+        cpu.registers.f.zero = false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     fn rra(cpu: &mut CPU) -> u8 {
