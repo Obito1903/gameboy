@@ -144,4 +144,63 @@ mod cpu_tests {
         assert_eq!(cpu.stack_pointer, 0xFFFD);
         assert_eq!(cpu.memory_bus.read_word(0xFFFD), 0x0003);
     }
+
+    #[test]
+    fn set_2_c() {
+        let mut cpu = CPU::new();
+        cpu.registers.c = 0x03;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0xD1);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.c, 0x07);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
+
+    #[test]
+    fn set_3_hl() {
+        let mut cpu = CPU::new();
+        cpu.registers.set_hl(0x03);
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0xDE);
+        cpu.memory_bus.write_byte(0x03, 0b0000_0011);
+
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.memory_bus.read_byte(cpu.registers.get_hl()), 0b0000_1011);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
+
+    #[test]
+    fn res_1_c() {
+        let mut cpu = CPU::new();
+        cpu.registers.c = 0x03;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x89);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.c, 0x01);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
+
+    #[test]
+    fn res_2_hl() {
+        let mut cpu = CPU::new();
+        cpu.registers.set_hl(0x07);
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x96);
+        cpu.memory_bus.write_byte(0x07, 0b0000_0111);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.memory_bus.read_byte(cpu.registers.get_hl()), 0b0000_0011);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
 }
