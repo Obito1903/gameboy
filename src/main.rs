@@ -15,6 +15,9 @@ struct Args {
     #[arg(short, long)]
     debug: bool,
 
+    #[arg(short, long)]
+    walk: bool,
+
     #[arg(short, long, default_value = "4.194304")]
     cpu_speed: f32,
 }
@@ -30,6 +33,9 @@ fn main() {
 
     if args.debug {
         cpu.debug = true;
+    }
+    if args.walk {
+        cpu.walk = true;
     }
     cpu.run(args.cpu_speed);
     println!("Hello, world!");

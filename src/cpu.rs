@@ -412,42 +412,26 @@ pub type Cycles = u8;
 pub type InstrLength = u8;
 
 impl Instruction {
-    fn from_byte(cpu: &mut CPU, pc: u16) -> (Self, InstrLength, Cycles) {
+    fn from_byte(cpu: &mut CPU, pc: u16) -> Self {
         let byte = cpu.memory_bus.read_byte(pc);
         match byte {
-            0x00 => (Self::NOP, 1, 4),
-            0x01 => (
-                Self::LD(
-                    OperandTypes::RegisterPair(RegisterPair::BC),
-                    OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
-                ),
-                3,
-                12,
+            0x00 => Self::NOP,
+            0x01 => Self::LD(
+                OperandTypes::RegisterPair(RegisterPair::BC),
+                OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0x02 => (
-                Self::LD(
-                    OperandTypes::Memory(RegisterPair::BC.get(cpu)),
-                    OperandTypes::Register(RegisterName::A),
-                ),
-                1,
-                8,
+            0x02 => Self::LD(
+                OperandTypes::Memory(RegisterPair::BC.get(cpu)),
+                OperandTypes::Register(RegisterName::A),
             ),
-            0x03 => (
-                Self::INC(OperandTypes::RegisterPair(RegisterPair::BC)),
-                1,
-                8,
+            0x03 => Self::INC(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0x04 => Self::INC(OperandTypes::Register(RegisterName::B)),
+            0x05 => Self::DEC(OperandTypes::Register(RegisterName::B)),
+            0x06 => Self::LD(
+                OperandTypes::Register(RegisterName::B),
+                OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
             ),
-            0x04 => (Self::INC(OperandTypes::Register(RegisterName::B)), 1, 4),
-            0x05 => (Self::DEC(OperandTypes::Register(RegisterName::B)), 1, 4),
-            0x06 => (
-                Self::LD(
-                    OperandTypes::Register(RegisterName::B),
-                    OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
-                ),
-                2,
-                8,
-            ),
-            0x07 => (Self::RLCA, 1, 4),
+            0x07 => Self::RLCA,
             0x08 => Self::LD(
                 OperandTypes::Memory(cpu.memory_bus.read_word(pc + 1)),
                 OperandTypes::RegisterPair(RegisterPair::SP),
@@ -1325,107 +1309,53 @@ impl Instruction {
         }
     }
 
-    fn nb_bytes(&self) -> u8 {
-        match self {
-            Self::ADD(_, source) => match source {
-                OperandTypes::D8(_) | OperandTypes::R8(_) => 2,
-                _ => 1,
-            },
-            Self::ADDSP(_) => 2,
-            Self::ADC(_, source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::AND(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::BIT(_, _) => 2,
-            Self::CALL(_, _) => 3,
-            Self::CCF => 1,
-            Self::CP(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::CPL => 1,
-            Self::DAA => 1,
-            Self::DEC(_) => 1,
-            Self::DI => 1,
-            Self::EI => 1,
-            Self::HALT => 1,
-            Self::INC(_) => 1,
-            Self::JR(_, _) => 2,
-            Self::JP(_, source) => match source {
-                OperandTypes::Memory(_) => 2,
-                _ => 3,
-            },
-            Self::LD(target, source) => match target {
-                OperandTypes::Memory(address) => match source {
-                    OperandTypes::Register(RegisterName::A) => {
-                        if (address & 0xFF00) == 0xFF00 {
-                            2
-                        } else {
-                            3
-                        }
-                    }
-                    _ => 1,
-                },
-                OperandTypes::Register(RegisterName::A) => match source {
-                    OperandTypes::Memory(address) => {
-                        if (address & 0xFF00) == 0xFF00 {
-                            2
-                        } else {
-                            3
-                        }
-                    }
-                    _ => 1,
-                },
-                _ => match source {
-                    OperandTypes::D8(_) => 2,
-                    OperandTypes::D16(_) => 3,
-                    _ => 1,
-                },
-            },
-            Self::NOP => 1,
-            Self::OR(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::POP(_) => 1,
-            Self::PUSH(_) => 1,
-            Self::RES(_, _) => 2,
-            Self::RET(_) => 1,
-            Self::RETI => 1,
-            Self::RL(_) => 2,
-            Self::RLA => 1,
-            Self::RLC(_) => 2,
-            Self::RLCA => 1,
-            Self::RR(_) => 2,
-            Self::RRA => 1,
-            Self::RRC(_) => 2,
-            Self::RRCA => 1,
-            Self::RST(_) => 1,
-            Self::SBC(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::SCF => 1,
-            Self::SET(_, _) => 2,
-            Self::SLA(_) => 2,
-            Self::SRA(_) => 2,
-            Self::SRL(_) => 2,
-            Self::STOP => 1,
-            Self::SUB(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::SWAP(_) => 2,
-            Self::XOR(source) => match source {
-                OperandTypes::D8(_) => 2,
-                _ => 1,
-            },
-            Self::PREFIX => 1,
-            _ => panic!("Instruction {:?} not implemented", self),
+    fn nb_bytes(opcode: u8) -> u8 {
+        match opcode {
+            0x01 => 3,
+            0x06 => 2,
+            0x08 => 3,
+            0x0E => 2,
+            0x10 => 2,
+            0x11 => 3,
+            0x16 => 2,
+            0x18 => 2,
+            0x1E => 2,
+            0x20 => 2,
+            0x21 => 3,
+            0x26 => 2,
+            0x28 => 2,
+            0x2E => 2,
+            0x30 => 2,
+            0x31 => 3,
+            0x36 => 2,
+            0x38 => 2,
+            0x3E => 2,
+            0xC2 => 3,
+            0xC3 => 3,
+            0xC4 => 3,
+            0xC6 => 2,
+            0xCA => 3,
+            0xCC => 3,
+            0xCD => 3,
+            0xCE => 2,
+            0xD2 => 3,
+            0xD4 => 3,
+            0xD6 => 2,
+            0xDA => 3,
+            0xDC => 3,
+            0xDE => 2,
+            0xE0 => 2,
+            0xE2 => 2,
+            0xE6 => 2,
+            0xEA => 3,
+            0xEE => 2,
+            0xF0 => 2,
+            0xF2 => 2,
+            0xF6 => 2,
+            0xFA => 3,
+            0xFE => 2,
+            0xCB => 2,
+            _ => 1,
         }
     }
 
@@ -1586,7 +1516,7 @@ impl Instruction {
             TargetSize::Word(source_value) => (source_value & (1 << bit) != 0, 16),
             _ => panic!("BIT only available for bytes sources"),
         };
-        cpu.registers.f.zero = !is_set;
+        cpu.registers.f.zero = is_set;
         cpu.registers.f.subtract = false;
         cpu.registers.f.half_carry = true;
         cycles
@@ -2251,7 +2181,7 @@ impl MemoryBus {
 
     #[inline]
     pub fn read_word(&self, address: u16) -> u16 {
-        (self.read_byte(address) as u16) << 8 | self.read_byte(address + 1) as u16
+        (self.read_byte(address + 1) as u16) << 8 | self.read_byte(address) as u16
     }
 
     #[inline]
@@ -2282,8 +2212,8 @@ impl MemoryBus {
 
     #[inline]
     pub fn write_word(&mut self, addr: u16, word: u16) {
-        self.write_byte(addr, (word >> 8) as u8);
-        self.write_byte(addr + 1, word as u8);
+        self.write_byte(addr, word as u8);
+        self.write_byte(addr + 1, (word >> 8) as u8);
     }
 
     fn read_joypad(&self) -> u8 {
@@ -2337,6 +2267,7 @@ pub struct CPU {
     pub interupt_master_enable: bool,
     pub memory_bus: MemoryBus,
     pub debug: bool,
+    pub walk: bool,
     pub is_halted: bool,
 }
 
@@ -2349,6 +2280,7 @@ impl CPU {
             interupt_master_enable: false,
             memory_bus: MemoryBus::new(),
             debug: false,
+            walk: false,
             is_halted: false,
         }
     }
@@ -2369,13 +2301,16 @@ impl CPU {
                 instruction
             );
         }
+
         match instruction {
             Instruction::STOP => {
                 self.advance_pc(1);
                 None
             }
             _ => {
-                self.advance_pc(instruction.nb_bytes());
+                self.advance_pc(Instruction::nb_bytes(
+                    self.memory_bus.read_byte(self.program_counter),
+                ));
                 let cycles = instruction.execute(self);
                 Some(cycles)
             }
@@ -2423,6 +2358,13 @@ impl CPU {
                     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
                 }
                 None => break,
+            }
+            if self.walk {
+                println!("CPU Registers: {:?}", self.registers);
+                println!("CPU Program Counter: {:#06x?}", self.program_counter);
+                println!("CPU Stack Pointer: {:#06x?}", self.stack_pointer);
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).unwrap();
             }
         }
     }
