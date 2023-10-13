@@ -1707,7 +1707,17 @@ impl Instruction {
 
     #[inline]
     fn or(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("OR not implemented")
+        match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                cpu.registers.a = cpu.registers.a | source_value;
+            }
+            _ => panic!("OR only available for bytes sources"),
+        };
+        cpu.registers.f.zero = cpu.registers.a == 0;
+        cpu.registers.f.subtract=false;
+        cpu.registers.f.carry=false;
+        cpu.registers.f.half_carry=false;
+        4
     }
 
     #[inline]
@@ -1986,12 +1996,35 @@ impl Instruction {
 
     #[inline]
     fn swap(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SWAP not implemented")
+        let value = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                target_value
+            }
+            _ => panic!("SWAP only available for bytes sources"),
+        };
+        let b = value >> 4;
+        let c = value << 4;
+        target.set(cpu, TargetSize::Byte(b^c));
+        cpu.registers.f.zero=b^c==0;
+        cpu.registers.f.subtract=false;
+        cpu.registers.f.carry=false;
+        cpu.registers.f.half_carry=false;
+        8
     }
 
     #[inline]
     fn xor(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("XOR not implemented")
+        match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                cpu.registers.a = cpu.registers.a ^ source_value;
+            }
+            _ => panic!("XOR only available for bytes sources"),
+        };
+        cpu.registers.f.zero = cpu.registers.a == 0;
+        cpu.registers.f.subtract=false;
+        cpu.registers.f.carry=false;
+        cpu.registers.f.half_carry=false;
+        4
     }
 }
 

@@ -453,4 +453,44 @@ mod cpu_tests {
         assert_eq!(cpu.memory_bus.read_byte(cpu.registers.get_hl()), 0b0000_0011);
         assert_eq!(cpu.program_counter, 0x0003);
     }
+    #[test]
+    fn xor_c() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0011;
+        cpu.registers.c = 0b0000_0010;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xA9);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+    #[test]
+    fn or_c() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0001;
+        cpu.registers.c = 0b0000_0010;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xA9);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b0000_0011);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+    #[test]
+    fn swap() {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b0000_0001;
+
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x30);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0001_0000);
+        assert_eq!(cpu.program_counter, 0x0003);
+    }
 }
