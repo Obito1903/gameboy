@@ -430,6 +430,31 @@ mod cpu_tests {
     }
 
     #[test]
+    fn pop_bc() {
+        let mut cpu = CPU::new();
+        cpu.registers.set_de(0x0003);
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xD5);
+        cpu.memory_bus.write_byte(0x0001, 0xC1);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.get_bc(), 0x0003);
+    }
+
+    #[test]
+    fn push_bc() {
+        let mut cpu = CPU::new();
+        cpu.registers.set_bc(0x0003);
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xC5);
+        // Stop instruction
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.memory_bus.read_word(0xFFFD), 0x0003);
+    }
+
+    #[test]
     fn set_2_c() {
         let mut cpu = CPU::new();
         cpu.registers.c = 0x03;
