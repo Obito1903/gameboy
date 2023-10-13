@@ -1763,7 +1763,7 @@ impl Instruction {
 
     #[inline]
     fn nop(cpu: &mut CPU) -> u8 {
-        todo!("NOP not implemented")
+        4
     }
 
     #[inline]
@@ -1816,12 +1816,21 @@ impl Instruction {
 
     #[inline]
     fn ret(cpu: &mut CPU, condition: Option<FlagOperand>) -> u8 {
-        todo!("RET not implemented")
+        if condition.is_none() || condition.unwrap().get(cpu) {
+            cpu.ret(true);
+            20
+        } else {
+            cpu.ret(false);
+            8
+        }
     }
 
     #[inline]
     fn reti(cpu: &mut CPU) -> u8 {
-        todo!("RETI not implemented")
+        cpu.ret(true);
+        cpu.interupt_master_enable = true;
+        //IME? 
+        16
     }
 
     #[inline]
@@ -2403,7 +2412,10 @@ impl CPU {
     }
 
     fn ret(&mut self, should_return: bool) -> u16 {
-        todo!("Ret not implemented")
+        if should_return {
+            self.program_counter = self.pop_word();
+        }
+        self.program_counter
     }
 
     // Stack
