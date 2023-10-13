@@ -52,6 +52,7 @@ impl std::convert::From<u8> for FlagsRegister {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct InteruptsFlags {
     pub v_blank: bool,
     pub lcd_stat: bool,
@@ -96,6 +97,36 @@ impl std::convert::From<u8> for InteruptsFlags {
             timer,
             serial,
             joypad,
+        }
+    }
+}
+
+pub struct JoypadFlags {
+    pub buttons: bool,
+    pub direction: bool,
+    pub a: bool,
+    pub b: bool,
+    pub select: bool,
+    pub start: bool,
+    pub right: bool,
+    pub left: bool,
+    pub up: bool,
+    pub down: bool,
+}
+
+impl JoypadFlags {
+    fn new() -> Self {
+        Self {
+            buttons: false,
+            direction: false,
+            a: false,
+            b: false,
+            select: false,
+            start: false,
+            right: false,
+            left: false,
+            up: false,
+            down: false,
         }
     }
 }
@@ -343,8 +374,8 @@ enum Instruction {
     LD(OperandTypes, OperandTypes),
     NOP,
     OR(OperandTypes),
-    POP(OperandTypes),
-    PUSH(OperandTypes),
+    POP(RegisterPair),
+    PUSH(RegisterPair),
     RES(u8, OperandTypes),
     RET(Option<FlagOperand>),
     RETI,
@@ -357,7 +388,7 @@ enum Instruction {
     RRC(OperandTypes),
     RRCA,
     RST(OperandTypes),
-    SBC(OperandTypes, OperandTypes),
+    SBC(OperandTypes),
     SCF,
     SET(u8, OperandTypes),
     SLA(OperandTypes),
@@ -852,38 +883,14 @@ impl Instruction {
             0x95 => Self::SUB(OperandTypes::Register(RegisterName::L)),
             0x96 => Self::SUB(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0x97 => Self::SUB(OperandTypes::Register(RegisterName::A)),
-            0x98 => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::B),
-            ),
-            0x99 => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::C),
-            ),
-            0x9A => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::D),
-            ),
-            0x9B => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::E),
-            ),
-            0x9C => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::H),
-            ),
-            0x9D => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::L),
-            ),
-            0x9E => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Memory(RegisterPair::HL.get(cpu)),
-            ),
-            0x9F => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::Register(RegisterName::A),
-            ),
+            0x98 => Self::SBC(OperandTypes::Register(RegisterName::B)),
+            0x99 => Self::SBC(OperandTypes::Register(RegisterName::C)),
+            0x9A => Self::SBC(OperandTypes::Register(RegisterName::D)),
+            0x9B => Self::SBC(OperandTypes::Register(RegisterName::E)),
+            0x9C => Self::SBC(OperandTypes::Register(RegisterName::H)),
+            0x9D => Self::SBC(OperandTypes::Register(RegisterName::L)),
+            0x9E => Self::SBC(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
+            0x9F => Self::SBC(OperandTypes::Register(RegisterName::A)),
             0xA0 => Self::AND(OperandTypes::Register(RegisterName::B)),
             0xA1 => Self::AND(OperandTypes::Register(RegisterName::C)),
             0xA2 => Self::AND(OperandTypes::Register(RegisterName::D)),
@@ -917,7 +924,7 @@ impl Instruction {
             0xBE => Self::CP(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0xBF => Self::CP(OperandTypes::Register(RegisterName::A)),
             0xC0 => Self::RET(Some(FlagOperand::NZ)),
-            0xC1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC1 => Self::POP(RegisterPair::BC),
             0xC2 => Self::JP(
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -927,7 +934,7 @@ impl Instruction {
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xC5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC5 => Self::PUSH(RegisterPair::BC),
             0xC6 => Self::ADD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
@@ -950,7 +957,7 @@ impl Instruction {
             ),
             0xCF => Self::RST(OperandTypes::D8(0x08)),
             0xD0 => Self::RET(Some(FlagOperand::NC)),
-            0xD1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD1 => Self::POP(RegisterPair::DE),
             0xD2 => Self::JP(
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -959,7 +966,7 @@ impl Instruction {
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xD5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD5 => Self::PUSH(RegisterPair::DE),
             0xD6 => Self::SUB(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xD7 => Self::RST(OperandTypes::D8(0x10)),
             0xD8 => Self::RET(Some(FlagOperand::Carry)),
@@ -972,21 +979,18 @@ impl Instruction {
                 Some(FlagOperand::Carry),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xDE => Self::SBC(
-                OperandTypes::Register(RegisterName::A),
-                OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
-            ),
+            0xDE => Self::SBC(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xDF => Self::RST(OperandTypes::D8(0x18)),
             0xE0 => Self::LD(
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE1 => Self::POP(RegisterPair::HL),
             0xE2 => Self::LD(
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE5 => Self::PUSH(RegisterPair::HL),
             0xE6 => Self::AND(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xE7 => Self::RST(OperandTypes::D8(0x20)),
             0xE8 => Self::ADD(
@@ -1004,13 +1008,13 @@ impl Instruction {
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
             ),
-            0xF1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF1 => Self::POP(RegisterPair::AF),
             0xF2 => Self::LD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
             ),
             0xF3 => Self::DI,
-            0xF5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF5 => Self::PUSH(RegisterPair::AF),
             0xF6 => Self::OR(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xF7 => Self::RST(OperandTypes::D8(0x30)),
             0xF8 => Self::LD(
@@ -1376,7 +1380,7 @@ impl Instruction {
             Self::RRC(_) => 2,
             Self::RRCA => 1,
             Self::RST(_) => 1,
-            Self::SBC(_, source) => match source {
+            Self::SBC(source) => match source {
                 OperandTypes::D8(_) => 2,
                 _ => 1,
             },
@@ -1402,51 +1406,56 @@ impl Instruction {
 
     // Return the clock cycles taken by the instruction
     fn execute(&self, cpu: &mut CPU) -> u8 {
-        match self {
-            Self::ADD(target, source) => Self::add(cpu, *target, *source),
-            Self::ADC(target, source) => Self::adc(cpu, *target, *source),
-            Self::AND(source) => Self::and(cpu, *source),
-            Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
-            Self::CALL(condition, address) => Self::call(cpu, *condition, *address),
-            Self::CCF => Self::ccf(cpu),
-            Self::CP(source) => Self::cp(cpu, *source),
-            Self::CPL => Self::cpl(cpu),
-            Self::DAA => Self::daa(cpu),
-            Self::DEC(target) => Self::dec(cpu, *target),
-            Self::DI => Self::di(cpu),
-            Self::EI => Self::ei(cpu),
-            Self::HALT => Self::halt(cpu),
-            Self::INC(target) => Self::inc(cpu, *target),
-            Self::JR(condition, offset) => Self::jr(cpu, *condition, *offset),
-            Self::JP(condition, address) => Self::jp(cpu, *condition, *address),
-            Self::LD(target, source) => Self::ld(cpu, *target, *source),
-            Self::NOP => Self::nop(cpu),
-            Self::OR(source) => Self::or(cpu, *source),
-            Self::POP(target) => Self::pop(cpu, *target),
-            Self::PUSH(source) => Self::push(cpu, *source),
-            Self::RES(bit, target) => Self::res(cpu, *bit, *target),
-            Self::RET(condition) => Self::ret(cpu, *condition),
-            Self::RETI => Self::reti(cpu),
-            Self::RL(target) => Self::rl(cpu, *target),
-            Self::RLA => Self::rla(cpu),
-            Self::RLC(target) => Self::rlc(cpu, *target),
-            Self::RLCA => Self::rlca(cpu),
-            Self::RR(target) => Self::rr(cpu, *target),
-            Self::RRA => Self::rra(cpu),
-            Self::RRC(target) => Self::rrc(cpu, *target),
-            Self::RRCA => Self::rrca(cpu),
-            Self::RST(address) => Self::rst(cpu, *address),
-            Self::SBC(target, source) => Self::sbc(cpu, *target, *source),
-            Self::SCF => Self::scf(cpu),
-            Self::SET(bit, target) => Self::set(cpu, *bit, *target),
-            Self::SLA(target) => Self::sla(cpu, *target),
-            Self::SRA(target) => Self::sra(cpu, *target),
-            Self::SRL(target) => Self::srl(cpu, *target),
-            Self::STOP => Self::stop(cpu),
-            Self::SUB(source) => Self::sub(cpu, *source),
-            Self::SWAP(target) => Self::swap(cpu, *target),
-            Self::XOR(source) => Self::xor(cpu, *source),
-            _ => 0,
+        if !cpu.is_halted {
+            match self {
+                Self::ADD(target, source) => Self::add(cpu, *target, *source),
+                Self::ADC(target, source) => Self::adc(cpu, *target, *source),
+                Self::AND(source) => Self::and(cpu, *source),
+                Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
+                Self::CALL(condition, address) => Self::call(cpu, *condition, *address),
+                Self::CCF => Self::ccf(cpu),
+                Self::CP(source) => Self::cp(cpu, *source),
+                Self::CPL => Self::cpl(cpu),
+                Self::DAA => Self::daa(cpu),
+                Self::DEC(target) => Self::dec(cpu, *target),
+                Self::DI => Self::di(cpu),
+                Self::EI => Self::ei(cpu),
+                Self::HALT => Self::halt(cpu),
+                Self::INC(target) => Self::inc(cpu, *target),
+                Self::JR(condition, offset) => Self::jr(cpu, *condition, *offset),
+                Self::JP(condition, address) => Self::jp(cpu, *condition, *address),
+                Self::LD(target, source) => Self::ld(cpu, *target, *source),
+                Self::NOP => Self::nop(cpu),
+                Self::OR(source) => Self::or(cpu, *source),
+                Self::POP(target) => Self::pop(cpu, *target),
+                Self::PUSH(source) => Self::push(cpu, *source),
+                Self::RES(bit, target) => Self::res(cpu, *bit, *target),
+                Self::RET(condition) => Self::ret(cpu, *condition),
+                Self::RETI => Self::reti(cpu),
+                Self::RL(target) => Self::rl(cpu, *target),
+                Self::RLA => Self::rla(cpu),
+                Self::RLC(target) => Self::rlc(cpu, *target),
+                Self::RLCA => Self::rlca(cpu),
+                Self::RR(target) => Self::rr(cpu, *target),
+                Self::RRA => Self::rra(cpu),
+                Self::RRC(target) => Self::rrc(cpu, *target),
+                Self::RRCA => Self::rrca(cpu),
+                Self::RST(address) => Self::rst(cpu, *address),
+                Self::SBC(source) => Self::sbc(cpu, *source),
+                Self::SCF => Self::scf(cpu),
+                Self::SET(bit, target) => Self::set(cpu, *bit, *target),
+                Self::SLA(target) => Self::sla(cpu, *target),
+                Self::SRA(target) => Self::sra(cpu, *target),
+                Self::SRL(target) => Self::srl(cpu, *target),
+                Self::STOP => Self::stop(cpu),
+                Self::SUB(source) => Self::sub(cpu, *source),
+                Self::SWAP(target) => Self::swap(cpu, *target),
+                Self::XOR(source) => Self::xor(cpu, *source),
+                _ => 0,
+            }
+        } else {
+            // CPU is halted, do nothing
+            0
         }
     }
 
@@ -1561,12 +1570,9 @@ impl Instruction {
             let address = match address {
                 OperandTypes::D16(address) => address,
                 OperandTypes::A16(address) => address,
-
                 _ => panic!("CALL only available for 16 bits addresses"),
             };
-            // cpu.stack_pointer -= 1;
-            cpu.push_word(cpu.program_counter);
-            cpu.program_counter = address;
+            cpu.call(address);
         };
 
         match condition {
@@ -1587,7 +1593,11 @@ impl Instruction {
 
     #[inline]
     fn ccf(cpu: &mut CPU) -> u8 {
-        todo!("CCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = !cpu.registers.f.carry;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
     ///Subtracts from the 8-bit A register, the 8-bit register r, and updates flags based on the result.
@@ -1618,7 +1628,30 @@ impl Instruction {
 
     #[inline]
     fn daa(cpu: &mut CPU) -> u8 {
-        todo!("DAA not implemented")
+        if !cpu.registers.f.zero {
+            if cpu.registers.f.carry || cpu.registers.a > 0x99 {
+                cpu.registers.a = cpu.registers.a.wrapping_add(0x60);
+                cpu.registers.f.carry = true;
+            }
+
+            if cpu.registers.f.half_carry || (cpu.registers.a & 0x0F) > 0x09 {
+                cpu.registers.a = cpu.registers.a.wrapping_add(0x06);
+            }
+        } else {
+            if cpu.registers.f.carry {
+                cpu.registers.a = cpu.registers.a.wrapping_sub(0x90);
+                cpu.registers.f.carry = false;
+            }
+
+            if cpu.registers.f.half_carry {
+                cpu.registers.a = cpu.registers.a.wrapping_sub(0x6);
+            }
+        }
+
+        cpu.registers.f.zero = cpu.registers.a == 0;
+        cpu.registers.f.half_carry = false;
+
+        4
     }
 
     #[inline]
@@ -1657,7 +1690,8 @@ impl Instruction {
 
     #[inline]
     fn halt(cpu: &mut CPU) -> u8 {
-        todo!("HALT not implemented")
+        cpu.is_halted = true;
+        4
     }
 
     #[inline]
@@ -1714,20 +1748,23 @@ impl Instruction {
             _ => panic!("OR only available for bytes sources"),
         };
         cpu.registers.f.zero = cpu.registers.a == 0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         4
     }
 
     #[inline]
-    fn pop(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("POP not implemented")
+    fn pop(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        let value = cpu.pop_word();
+        target.set(cpu, value);
+        12
     }
 
     #[inline]
-    fn push(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("PUSH not implemented")
+    fn push(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        cpu.push_word(target.get(cpu));
+        16
     }
 
     #[inline]
@@ -1735,16 +1772,16 @@ impl Instruction {
         let cycles = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
                 let bitmask = !(1 << bit);
-                 let new_value = target_value & bitmask;
-                 target.set(cpu, TargetSize::Byte(new_value));
-                  8
-            },
+                let new_value = target_value & bitmask;
+                target.set(cpu, TargetSize::Byte(new_value));
+                8
+            }
             TargetSize::Word(target_value) => {
                 let bitmask = !(1 << bit);
-                 let new_value = target_value & bitmask;
-                 target.set(cpu, TargetSize::Word(new_value));
-                  16
-            },
+                let new_value = target_value & bitmask;
+                target.set(cpu, TargetSize::Word(new_value));
+                16
+            }
             _ => panic!("BIT only available for bytes sources"),
         };
         cycles
@@ -1845,7 +1882,6 @@ impl Instruction {
             _ => panic!("RR is only available for bytes targets"),
         };
 
-
         target.set(cpu, TargetSize::Byte(new_value));
 
         cpu.registers.f.zero = false;
@@ -1895,7 +1931,7 @@ impl Instruction {
         let cycle = 4;
 
         let (mut new_value, new_carry) = cpu.registers.a.overflowing_shr(1);
-        
+
         if cpu.registers.f.carry {
             new_value = new_value | 0b1000_0000;
         }
@@ -1912,13 +1948,42 @@ impl Instruction {
     }
 
     #[inline]
-    fn sbc(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
-        todo!("SBC not implemented")
+    fn sbc(cpu: &mut CPU, source: OperandTypes) -> u8 {
+        let (new_value, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu
+                    .registers
+                    .a
+                    .overflowing_sub(cpu.registers.f.carry as u8 + source_value);
+                (new_value, overflow)
+            }
+            _ => panic!("SBC only available for bytes sources"),
+        };
+
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        let old_val = match source.get(cpu) {
+            TargetSize::Byte(source_value) => source_value,
+            _ => panic!("SBC only available for bytes sources"),
+        };
+
+        cpu.registers.f.half_carry = (cpu.registers.a & 0xF) + (old_val & 0xF) > 0xF;
+
+        cpu.registers.a = new_value;
+        match source {
+            OperandTypes::D8(_) => 8,
+            _ => 4,
+        }
     }
 
     #[inline]
     fn scf(cpu: &mut CPU) -> u8 {
-        todo!("SCF not implemented")
+        let cycle = 4;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = true;
+        cpu.registers.f.half_carry = false;
+        cycle
     }
 
     #[inline]
@@ -1926,16 +1991,16 @@ impl Instruction {
         let cycles = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
                 let bitmask = 1 << bit;
-                 let new_value = target_value | bitmask;
-                 target.set(cpu, TargetSize::Byte(new_value));
-                  8
-            },
+                let new_value = target_value | bitmask;
+                target.set(cpu, TargetSize::Byte(new_value));
+                8
+            }
             TargetSize::Word(target_value) => {
                 let bitmask = 1 << bit;
-                 let new_value = target_value | bitmask;
-                 target.set(cpu, TargetSize::Word(new_value));
-                  16
-            },
+                let new_value = target_value | bitmask;
+                target.set(cpu, TargetSize::Word(new_value));
+                16
+            }
             _ => panic!("BIT only available for bytes sources"),
         };
         cycles
@@ -1949,7 +2014,6 @@ impl Instruction {
                 let new_carry = target_value & 0b1000_0000 != 0;
                 let new_value = target_value << 1;
                 (new_carry, new_value)
-
             }
             _ => panic!("SLA is only available for bytes targets"),
         };
@@ -1960,7 +2024,7 @@ impl Instruction {
         8
     }
 
-    /// Shift n right into Carry. 
+    /// Shift n right into Carry.
     #[inline]
     fn sra(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let (new_carry, new_value) = match target.get(cpu) {
@@ -1976,12 +2040,26 @@ impl Instruction {
         cpu.registers.f.subtract = false;
         cpu.registers.f.carry = new_carry;
         8
-    
     }
 
     #[inline]
     fn srl(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SRL not implemented")
+        let cycle = 8;
+
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b0000_0001 != 0;
+                let new_value = target_value >> 1;
+                (new_carry, new_value)
+            }
+            _ => panic!("SRL is only available for bytes targets"),
+        };
+
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        cycle
     }
 
     #[inline]
@@ -1991,24 +2069,36 @@ impl Instruction {
 
     #[inline]
     fn sub(cpu: &mut CPU, source: OperandTypes) -> u8 {
-        todo!("SUB not implemented")
+        let cycle = 8;
+
+        let (zero, overflow) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => {
+                let (new_value, overflow) = cpu.registers.a.overflowing_sub(source_value);
+                cpu.registers.a = new_value;
+                ((new_value == 0), overflow)
+            }
+            _ => panic!("SUB only available for bytes sources"),
+        };
+
+        cpu.registers.f.zero = zero;
+        cpu.registers.f.subtract = true;
+        cpu.registers.f.carry = overflow;
+        cycle
     }
 
     #[inline]
     fn swap(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let value = match target.get(cpu) {
-            TargetSize::Byte(target_value) => {
-                target_value
-            }
+            TargetSize::Byte(target_value) => target_value,
             _ => panic!("SWAP only available for bytes sources"),
         };
         let b = value >> 4;
         let c = value << 4;
-        target.set(cpu, TargetSize::Byte(b^c));
-        cpu.registers.f.zero=b^c==0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        target.set(cpu, TargetSize::Byte(b ^ c));
+        cpu.registers.f.zero = b ^ c == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         8
     }
 
@@ -2021,80 +2111,134 @@ impl Instruction {
             _ => panic!("XOR only available for bytes sources"),
         };
         cpu.registers.f.zero = cpu.registers.a == 0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         4
     }
 }
 
-pub enum InteruptEnableRegister {
-    VBlank,
-    LCDStat,
-    Timer,
-    Serial,
-    Joypad,
+#[derive(Debug, Clone, Copy)]
+pub enum JoypadButton {
+    A,
+    B,
+    Select,
+    Start,
+    Right,
+    Left,
+    Up,
+    Down,
 }
 
 pub struct MemoryBus {
-    pub memory: [u8; 0xFFFF],
+    pub memory: [u8; 0x10000],
+    pub interupt_enable: InteruptsFlags,
+    pub interupt_flags: InteruptsFlags,
+    pub joypad_flags: JoypadFlags,
 }
 
 impl MemoryBus {
     fn new() -> Self {
         Self {
-            memory: [0; 0xFFFF],
+            memory: [0; 0x10000],
+            interupt_enable: InteruptsFlags::new(),
+            interupt_flags: InteruptsFlags::new(),
+            joypad_flags: JoypadFlags::new(),
         }
     }
 
+    #[inline]
     pub fn read_byte(&self, address: u16) -> u8 {
-        self.memory[address as usize]
+        match address {
+            0x0000..=0x3FFF => self.memory[address as usize],
+            0x4000..=0x7FFF => match self.read_byte(0x0147) {
+                0x00 => self.memory[address as usize],
+                _ => todo!("Banked ROM not implemented"),
+            },
+            0x8000..=0x9FFF => self.memory[address as usize],
+            0xA000..=0xBFFF => self.memory[address as usize],
+            0xE000..=0xFDFF => self.read_byte(address - 0x2000),
+            0xFE00..=0xFEFF => self.memory[address as usize],
+            0xFF00 => self.read_joypad(),
+            0xFF01 => todo!("SB: Serial transfer data"),
+            0xFF02 => todo!("SC: Serial transfer control"),
+            0xFF04 => todo!("DIV: Divider register"),
+            0xFF05 => todo!("TIMA: Time counter"),
+            0xFF06 => todo!("TMA: Timer Module"),
+            0xFF07 => todo!("TAC: Timer control"),
+            0xFF0F => self.interupt_flags.into(),
+            0xFF80..=0xFFFE => self.memory[address as usize],
+            0xFFFF => self.interupt_enable.into(),
+            address => {
+                eprintln!(
+                    "Address {:#06x?} probably not implemented corrctly",
+                    address
+                );
+                self.memory[address as usize]
+            }
+        }
     }
 
+    #[inline]
     pub fn read_word(&self, address: u16) -> u16 {
         (self.read_byte(address) as u16) << 8 | self.read_byte(address + 1) as u16
     }
 
+    #[inline]
     fn read_next_byte(&self, current: u16) -> u8 {
         self.read_byte(current + 1)
     }
 
+    #[inline]
     pub fn write_byte(&mut self, addr: u16, byte: u8) {
-        self.memory[addr as usize] = byte;
+        match addr {
+            0x0000..=0xDFFF => self.memory[addr as usize] = byte,
+            0xE000..=0xFDFF => self.write_byte(addr - 0x2000, byte),
+            0xFE00..=0xFEFF => self.memory[addr as usize] = byte,
+            0xFF00 => self.write_joypad(byte),
+            0xFF04 => todo!("DIV: Divider register"),
+            0xFF05 => todo!("TIMA: Time counter"),
+            0xFF06 => todo!("TMA: Timer Module"),
+            0xFF07 => todo!("TAC: Timer control"),
+            0xFF0F => self.interupt_flags = InteruptsFlags::from(byte),
+            0xFF80..=0xFFFE => self.memory[addr as usize] = byte,
+            0xFFFF => self.interupt_enable = InteruptsFlags::from(byte),
+            addr => {
+                eprintln!("Address {:#06x?} probably not implemented corrctly", addr);
+                self.memory[addr as usize] = byte;
+            }
+        }
     }
+
+    #[inline]
     pub fn write_word(&mut self, addr: u16, word: u16) {
         self.write_byte(addr, (word >> 8) as u8);
         self.write_byte(addr + 1, word as u8);
     }
 
-    pub fn read_interupt_enable(&self, interupt: InteruptEnableRegister) -> bool {
-        let register = self.read_byte(0xFFFF);
-        match interupt {
-            InteruptEnableRegister::VBlank => register & 0b0000_0001 != 0,
-            InteruptEnableRegister::LCDStat => register & 0b0000_0010 != 0,
-            InteruptEnableRegister::Timer => register & 0b0000_0100 != 0,
-            InteruptEnableRegister::Serial => register & 0b0000_1000 != 0,
-            InteruptEnableRegister::Joypad => register & 0b0001_0000 != 0,
+    fn read_joypad(&self) -> u8 {
+        if self.joypad_flags.buttons {
+            (if self.joypad_flags.a { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.b { 0 } else { 1 } << 1)
+                | (if self.joypad_flags.select { 0 } else { 1 } << 2)
+                | (if self.joypad_flags.start { 0 } else { 1 } << 3)
+        } else if self.joypad_flags.direction {
+            (if self.joypad_flags.a { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.right { 0 } else { 1 } << 0)
+                | (if self.joypad_flags.left { 0 } else { 1 } << 1)
+                | (if self.joypad_flags.up { 0 } else { 1 } << 2)
+                | (if self.joypad_flags.down { 0 } else { 1 } << 3)
+        } else {
+            0b0011_1111
         }
     }
 
-    pub fn write_interupt_enable(&mut self, interupt: InteruptEnableRegister, value: bool) {
-        match interupt {
-            InteruptEnableRegister::VBlank => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1110) | (value as u8)
-            }
-            InteruptEnableRegister::LCDStat => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1101) | ((value as u8) << 1)
-            }
-            InteruptEnableRegister::Timer => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1011) | ((value as u8) << 2)
-            }
-            InteruptEnableRegister::Serial => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_0111) | ((value as u8) << 3)
-            }
-            InteruptEnableRegister::Joypad => {
-                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1110_1111) | ((value as u8) << 4)
-            }
+    fn write_joypad(&mut self, value: u8) {
+        // extract buttons flag
+        if ((value >> 4) & 0b1) == 0 {
+            self.joypad_flags.direction = true;
+        } else if ((value >> 5) & 0b1) == 0 {
+            self.joypad_flags.buttons = true;
         }
     }
 }
@@ -2104,8 +2248,8 @@ pub struct CPU {
     pub program_counter: u16,
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
-    pub iterupts_flags: InteruptsFlags,
     pub memory_bus: MemoryBus,
+    pub is_halted: bool,
 }
 
 impl CPU {
@@ -2115,15 +2259,17 @@ impl CPU {
             program_counter: 0,
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
-            iterupts_flags: InteruptsFlags::new(),
             memory_bus: MemoryBus::new(),
+            is_halted: false,
         }
     }
 
+    #[inline]
     fn advance_pc(&mut self, nb_bytes: u8) {
         self.program_counter += nb_bytes as u16;
     }
 
+    #[inline]
     fn read_instruction(&mut self) -> Option<u8> {
         let instruction = Instruction::from_byte(self, self.program_counter);
         match instruction {
@@ -2139,50 +2285,41 @@ impl CPU {
         }
     }
 
+    #[inline]
+    pub fn handle_interupt(&mut self) {
+        if self.interupt_master_enable {
+            if self.memory_bus.interupt_enable.v_blank && self.memory_bus.interupt_flags.v_blank {
+                self.call(0x40);
+                self.memory_bus.interupt_flags.v_blank = false;
+            } else if self.memory_bus.interupt_enable.lcd_stat
+                && self.memory_bus.interupt_flags.lcd_stat
+            {
+                self.call(0x48);
+                self.memory_bus.interupt_flags.lcd_stat = false;
+            } else if self.memory_bus.interupt_enable.timer && self.memory_bus.interupt_flags.timer
+            {
+                self.call(0x50);
+                self.memory_bus.interupt_flags.timer = false;
+            } else if self.memory_bus.interupt_enable.serial
+                && self.memory_bus.interupt_flags.serial
+            {
+                self.call(0x58);
+                self.memory_bus.interupt_flags.serial = false;
+            } else if self.memory_bus.interupt_enable.joypad
+                && self.memory_bus.interupt_flags.joypad
+            {
+                self.call(0x60);
+                self.memory_bus.interupt_flags.joypad = false;
+            }
+        }
+    }
+
     pub fn run(&mut self, mhz: f32) {
         let cycles_per_second = mhz * 1_000_000.0;
 
         loop {
             // handle interupts
-            if self.interupt_master_enable {
-                if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::VBlank)
-                    && self.iterupts_flags.v_blank
-                {
-                    self.iterupts_flags.v_blank = false;
-                    todo!("VBlank interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::LCDStat)
-                    && self.iterupts_flags.lcd_stat
-                {
-                    self.iterupts_flags.lcd_stat = false;
-                    todo!("LCDStat interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Timer)
-                    && self.iterupts_flags.timer
-                {
-                    self.iterupts_flags.timer = false;
-                    todo!("Timer interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Serial)
-                    && self.iterupts_flags.serial
-                {
-                    self.iterupts_flags.serial = false;
-                    todo!("Serial interupt not implemented")
-                } else if self
-                    .memory_bus
-                    .read_interupt_enable(InteruptEnableRegister::Joypad)
-                    && self.iterupts_flags.joypad
-                {
-                    self.iterupts_flags.joypad = false;
-                    todo!("Joypad interupt not implemented")
-                }
-            }
-
+            self.handle_interupt();
             match self.read_instruction() {
                 Some(cycles) => {
                     let seconds = cycles as f32 / cycles_per_second;
@@ -2216,8 +2353,9 @@ impl CPU {
         todo!("Jump not implemented")
     }
 
-    fn call(&mut self, should_call: bool) -> u16 {
-        todo!("Call not implemented")
+    pub fn call(&mut self, address: u16) {
+        self.push_word(self.program_counter);
+        self.program_counter = address;
     }
 
     fn ret(&mut self, should_return: bool) -> u16 {
