@@ -343,8 +343,8 @@ enum Instruction {
     LD(OperandTypes, OperandTypes),
     NOP,
     OR(OperandTypes),
-    POP(OperandTypes),
-    PUSH(OperandTypes),
+    POP(RegisterPair),
+    PUSH(RegisterPair),
     RES(u8, OperandTypes),
     RET(Option<FlagOperand>),
     RETI,
@@ -917,7 +917,7 @@ impl Instruction {
             0xBE => Self::CP(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0xBF => Self::CP(OperandTypes::Register(RegisterName::A)),
             0xC0 => Self::RET(Some(FlagOperand::NZ)),
-            0xC1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC1 => Self::POP(RegisterPair::BC),
             0xC2 => Self::JP(
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -927,7 +927,7 @@ impl Instruction {
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xC5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::BC)),
+            0xC5 => Self::PUSH(RegisterPair::BC),
             0xC6 => Self::ADD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
@@ -950,7 +950,7 @@ impl Instruction {
             ),
             0xCF => Self::RST(OperandTypes::D8(0x08)),
             0xD0 => Self::RET(Some(FlagOperand::NC)),
-            0xD1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD1 => Self::POP(RegisterPair::DE),
             0xD2 => Self::JP(
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -959,7 +959,7 @@ impl Instruction {
                 Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xD5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::DE)),
+            0xD5 => Self::PUSH(RegisterPair::DE),
             0xD6 => Self::SUB(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xD7 => Self::RST(OperandTypes::D8(0x10)),
             0xD8 => Self::RET(Some(FlagOperand::Carry)),
@@ -981,12 +981,12 @@ impl Instruction {
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE1 => Self::POP(RegisterPair::HL),
             0xE2 => Self::LD(
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
                 OperandTypes::Register(RegisterName::A),
             ),
-            0xE5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::HL)),
+            0xE5 => Self::PUSH(RegisterPair::HL),
             0xE6 => Self::AND(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xE7 => Self::RST(OperandTypes::D8(0x20)),
             0xE8 => Self::ADD(
@@ -1004,13 +1004,13 @@ impl Instruction {
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + cpu.memory_bus.read_byte(pc + 1) as u16),
             ),
-            0xF1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF1 => Self::POP(RegisterPair::AF),
             0xF2 => Self::LD(
                 OperandTypes::Register(RegisterName::A),
                 OperandTypes::Memory(0xFF00 + RegisterName::C.get(cpu) as u16),
             ),
             0xF3 => Self::DI,
-            0xF5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::AF)),
+            0xF5 => Self::PUSH(RegisterPair::AF),
             0xF6 => Self::OR(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xF7 => Self::RST(OperandTypes::D8(0x30)),
             0xF8 => Self::LD(
@@ -1715,13 +1715,16 @@ impl Instruction {
     }
 
     #[inline]
-    fn pop(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("POP not implemented")
+    fn pop(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        let value = cpu.pop_word();
+        target.set(cpu, value);
+        12
     }
 
     #[inline]
-    fn push(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("PUSH not implemented")
+    fn push(cpu: &mut CPU, target: RegisterPair) -> u8 {
+        cpu.push_word(target.get(cpu));
+        16
     }
 
     #[inline]
