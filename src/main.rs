@@ -12,6 +12,9 @@ struct Args {
     #[arg(short, long, default_value = "tetris.gb")]
     rom: String,
 
+    #[arg(short, long)]
+    debug: bool,
+
     #[arg(short, long, default_value = "4.194304")]
     cpu_speed: f32,
 }
@@ -25,6 +28,9 @@ fn main() {
     cpu.memory_bus.load_boot_rom(&boot_rom);
     cpu.memory_bus.print_section(0x00, 0x100);
 
+    if args.debug {
+        cpu.debug = true;
+    }
     cpu.run(args.cpu_speed);
     println!("Hello, world!");
 }

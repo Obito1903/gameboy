@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
     ops::{Shl, Shr},
+    u8,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -265,9 +266,11 @@ impl RegisterPair {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum TargetSize {
     Bit(bool),
     Byte(u8),
+    SignedByte(i8),
     Word(u16),
 }
 
@@ -303,7 +306,7 @@ enum OperandTypes {
     D16(u16),
     A8(u8),
     A16(u16),
-    R8(u8),
+    R8(i8),
     Memory(u16),
 }
 
@@ -328,6 +331,9 @@ impl OperandTypes {
                 TargetSize::Byte(byte) => {
                     cpu.memory_bus.write_byte(*address, byte);
                 }
+                TargetSize::SignedByte(byte) => {
+                    cpu.memory_bus.write_byte(*address, byte as u8);
+                }
                 TargetSize::Word(word) => {
                     cpu.memory_bus.write_byte(*address, (word >> 8) as u8);
                     cpu.memory_bus.write_byte(address + 1, word as u8);
@@ -346,7 +352,7 @@ impl OperandTypes {
             Self::D16(value) => TargetSize::Word(*value),
             Self::A8(value) => TargetSize::Word(0xFF00 | u16::from(*value)),
             Self::A16(value) => TargetSize::Word(*value),
-            Self::R8(value) => TargetSize::Byte(*value),
+            Self::R8(value) => TargetSize::SignedByte(*value),
             Self::Memory(address) => TargetSize::Byte(cpu.memory_bus.read_byte(*address)),
         }
     }
@@ -369,7 +375,7 @@ enum Instruction {
     EI,
     HALT,
     INC(OperandTypes),
-    JR(Option<FlagOperand>, OperandTypes),
+    JR(Option<FlagOperand>, i8),
     JP(Option<FlagOperand>, OperandTypes),
     LD(OperandTypes, OperandTypes),
     NOP,
@@ -402,27 +408,46 @@ enum Instruction {
     PREFIX,
 }
 
+pub type Cycles = u8;
+pub type InstrLength = u8;
+
 impl Instruction {
-    fn from_byte(cpu: &mut CPU, pc: u16) -> Self {
+    fn from_byte(cpu: &mut CPU, pc: u16) -> (Self, InstrLength, Cycles) {
         let byte = cpu.memory_bus.read_byte(pc);
         match byte {
-            0x00 => Self::NOP,
-            0x01 => Self::LD(
-                OperandTypes::RegisterPair(RegisterPair::BC),
-                OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
+            0x00 => (Self::NOP, 1, 4),
+            0x01 => (
+                Self::LD(
+                    OperandTypes::RegisterPair(RegisterPair::BC),
+                    OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
+                ),
+                3,
+                12,
             ),
-            0x02 => Self::LD(
-                OperandTypes::Memory(RegisterPair::BC.get(cpu)),
-                OperandTypes::Register(RegisterName::A),
+            0x02 => (
+                Self::LD(
+                    OperandTypes::Memory(RegisterPair::BC.get(cpu)),
+                    OperandTypes::Register(RegisterName::A),
+                ),
+                1,
+                8,
             ),
-            0x03 => Self::INC(OperandTypes::RegisterPair(RegisterPair::BC)),
-            0x04 => Self::INC(OperandTypes::Register(RegisterName::B)),
-            0x05 => Self::DEC(OperandTypes::Register(RegisterName::B)),
-            0x06 => Self::LD(
-                OperandTypes::Register(RegisterName::B),
-                OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
+            0x03 => (
+                Self::INC(OperandTypes::RegisterPair(RegisterPair::BC)),
+                1,
+                8,
             ),
-            0x07 => Self::RLCA,
+            0x04 => (Self::INC(OperandTypes::Register(RegisterName::B)), 1, 4),
+            0x05 => (Self::DEC(OperandTypes::Register(RegisterName::B)), 1, 4),
+            0x06 => (
+                Self::LD(
+                    OperandTypes::Register(RegisterName::B),
+                    OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
+                ),
+                2,
+                8,
+            ),
+            0x07 => (Self::RLCA, 1, 4),
             0x08 => Self::LD(
                 OperandTypes::Memory(cpu.memory_bus.read_word(pc + 1)),
                 OperandTypes::RegisterPair(RegisterPair::SP),
@@ -461,7 +486,7 @@ impl Instruction {
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0x17 => Self::RLA,
-            0x18 => Self::JR(None, OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1))),
+            0x18 => Self::JR(None, cpu.memory_bus.read_byte(pc + 1) as i8),
             0x19 => Self::ADD(
                 OperandTypes::RegisterPair(RegisterPair::HL),
                 OperandTypes::RegisterPair(RegisterPair::DE),
@@ -480,7 +505,7 @@ impl Instruction {
             0x1F => Self::RRA,
             0x20 => Self::JR(
                 Some(FlagOperand::NZ),
-                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
+                cpu.memory_bus.read_byte(pc + 1) as i8,
             ),
             0x21 => Self::LD(
                 OperandTypes::RegisterPair(RegisterPair::HL),
@@ -500,7 +525,7 @@ impl Instruction {
             0x27 => Self::DAA,
             0x28 => Self::JR(
                 Some(FlagOperand::Zero),
-                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
+                cpu.memory_bus.read_byte(pc + 1) as i8,
             ),
             0x29 => Self::ADD(
                 OperandTypes::RegisterPair(RegisterPair::HL),
@@ -520,7 +545,7 @@ impl Instruction {
             0x2F => Self::CPL,
             0x30 => Self::JR(
                 Some(FlagOperand::NC),
-                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
+                cpu.memory_bus.read_byte(pc + 1) as i8,
             ),
             0x31 => Self::LD(
                 OperandTypes::RegisterPair(RegisterPair::SP),
@@ -540,7 +565,7 @@ impl Instruction {
             0x37 => Self::SCF,
             0x38 => Self::JR(
                 Some(FlagOperand::Carry),
-                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
+                cpu.memory_bus.read_byte(pc + 1) as i8,
             ),
             0x39 => Self::ADD(
                 OperandTypes::RegisterPair(RegisterPair::HL),
@@ -995,7 +1020,7 @@ impl Instruction {
             0xE7 => Self::RST(OperandTypes::D8(0x20)),
             0xE8 => Self::ADD(
                 OperandTypes::RegisterPair(RegisterPair::SP),
-                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
+                OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1) as i8),
             ),
             0xE9 => Self::JP(None, OperandTypes::RegisterPair(RegisterPair::HL)),
             0xEA => Self::LD(
@@ -1471,6 +1496,7 @@ impl Instruction {
                         target_value.overflowing_add(source_value as u8)
                     }
                     TargetSize::Bit(_) => panic!("Cannot ADD bit"),
+                    source => panic!("Cannot ADD {:?} to byte", source),
                 };
                 target.set(cpu, TargetSize::Byte(new_value));
                 ((new_value == 0), overflow)
@@ -1486,11 +1512,13 @@ impl Instruction {
                         target_value.overflowing_add(source_value)
                     }
                     TargetSize::Bit(_) => panic!("Cannot ADD bit"),
+                    source => panic!("Cannot ADD {:?} to word", source),
                 };
                 target.set(cpu, TargetSize::Word(new_value));
                 ((new_value == 0), overflow)
             }
             TargetSize::Bit(_) => panic!("Cannot ADD bit"),
+            target => panic!("Cannot ADD {:?} to byte", target),
         };
         cpu.registers.f.zero = zero;
         cpu.registers.f.subtract = false;
@@ -1669,6 +1697,7 @@ impl Instruction {
                 ((new_value == 0), overflow)
             }
             TargetSize::Bit(_) => panic!("Cannot DEC bit"),
+            target => panic!("Cannot DEC {:?} to byte", target),
         };
         cpu.registers.f.zero = zero;
         cpu.registers.f.subtract = true;
@@ -1710,6 +1739,7 @@ impl Instruction {
                 ((new_value == 0), overflow)
             }
             TargetSize::Bit(_) => panic!("Cannot INC bit"),
+            target => panic!("Cannot INC {:?} to byte", target),
         };
 
         cpu.registers.f.zero = zero;
@@ -1720,8 +1750,21 @@ impl Instruction {
     }
 
     #[inline]
-    fn jr(cpu: &mut CPU, condition: Option<FlagOperand>, offset: OperandTypes) -> u8 {
-        todo!("JR not implemented")
+    fn jr(cpu: &mut CPU, condition: Option<FlagOperand>, offset: i8) -> u8 {
+        match condition {
+            Some(c) => {
+                if c.get(cpu) {
+                    cpu.program_counter = cpu.program_counter.wrapping_add_signed(offset as i16);
+                    12
+                } else {
+                    8
+                }
+            }
+            None => {
+                cpu.program_counter = cpu.program_counter.wrapping_add_signed(offset as i16);
+                12
+            }
+        }
     }
 
     #[inline]
@@ -2293,6 +2336,7 @@ pub struct CPU {
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
     pub memory_bus: MemoryBus,
+    pub debug: bool,
     pub is_halted: bool,
 }
 
@@ -2304,6 +2348,7 @@ impl CPU {
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
             memory_bus: MemoryBus::new(),
+            debug: false,
             is_halted: false,
         }
     }
@@ -2316,6 +2361,14 @@ impl CPU {
     #[inline]
     fn read_instruction(&mut self) -> Option<u8> {
         let instruction = Instruction::from_byte(self, self.program_counter);
+        if self.debug {
+            println!(
+                "PC: {:0004?} OP: {:#02x?} I: {:?}",
+                self.program_counter,
+                self.memory_bus.read_byte(self.program_counter),
+                instruction
+            );
+        }
         match instruction {
             Instruction::STOP => {
                 self.advance_pc(1);
