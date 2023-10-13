@@ -626,4 +626,24 @@ mod cpu_tests {
         assert_eq!(cpu.registers.f.half_carry, false);
         assert_eq!(cpu.registers.f.carry, true);
     }
+
+    #[test]
+    fn daa()
+    {
+        let mut cpu = CPU::new();
+        //0x60 + 0x60 = 0xc0
+        cpu.registers.a = 0xc0;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x27);
+    
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        //0x90 + 0x90 = 0x120 (0x20 + carry)
+        assert_eq!(cpu.registers.a, 0x20);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
 }
