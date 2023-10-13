@@ -1725,7 +1725,34 @@ impl Instruction {
 
     #[inline]
     fn ld(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
-        todo!("LD not implemented")
+        target.set(cpu, source.get(cpu));
+        // TODO : Fix cpu cylces
+        match target {
+            OperandTypes::Register(_) => match source {
+                OperandTypes::Register(_) => 4,
+                OperandTypes::Memory(_) => 8,
+                OperandTypes::D8(_) => 8,
+                source => panic!("Cannot LD from {:?} to {:?}", source, target),
+            },
+            OperandTypes::RegisterPair(_) => match source {
+                OperandTypes::RegisterPair(_) => 8,
+                OperandTypes::D16(_) => 12,
+                source => panic!("Cannot LD from {:?} to {:?}", source, target),
+            },
+            OperandTypes::Memory(address) => match source {
+                OperandTypes::Register(_) => {
+                    if (address & 0xFF00) == 0xFF00 {
+                        12
+                    } else {
+                        16
+                    }
+                }
+                source => panic!("Cannot LD to memory from {:?}", source),
+            },
+            target => panic!("LD not implemented for this target {:?}", target),
+        }
+
+        // todo!("LD not implemented")
     }
 
     #[inline]
