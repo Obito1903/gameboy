@@ -1623,7 +1623,30 @@ impl Instruction {
 
     #[inline]
     fn daa(cpu: &mut CPU) -> u8 {
-        todo!("DAA not implemented")
+        if !cpu.registers.f.zero {
+            if cpu.registers.f.carry || cpu.registers.a > 0x99 {
+                cpu.registers.a = cpu.registers.a.wrapping_add(0x60);
+                cpu.registers.f.carry = true;
+            }
+
+            if cpu.registers.f.half_carry || (cpu.registers.a & 0x0F) > 0x09 {
+                cpu.registers.a = cpu.registers.a.wrapping_add(0x06);
+            }
+        } else {
+            if cpu.registers.f.carry {
+                cpu.registers.a = cpu.registers.a.wrapping_sub(0x90);
+                cpu.registers.f.carry = false;
+            }
+
+            if cpu.registers.f.half_carry {
+                cpu.registers.a = cpu.registers.a.wrapping_sub(0x6);
+            }
+        }
+
+        cpu.registers.f.zero = cpu.registers.a == 0;
+        cpu.registers.f.half_carry = false;
+
+        4
     }
 
     #[inline]
@@ -1719,9 +1742,9 @@ impl Instruction {
             _ => panic!("OR only available for bytes sources"),
         };
         cpu.registers.f.zero = cpu.registers.a == 0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         4
     }
 
@@ -2060,18 +2083,16 @@ impl Instruction {
     #[inline]
     fn swap(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let value = match target.get(cpu) {
-            TargetSize::Byte(target_value) => {
-                target_value
-            }
+            TargetSize::Byte(target_value) => target_value,
             _ => panic!("SWAP only available for bytes sources"),
         };
         let b = value >> 4;
         let c = value << 4;
-        target.set(cpu, TargetSize::Byte(b^c));
-        cpu.registers.f.zero=b^c==0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        target.set(cpu, TargetSize::Byte(b ^ c));
+        cpu.registers.f.zero = b ^ c == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         8
     }
 
@@ -2084,9 +2105,9 @@ impl Instruction {
             _ => panic!("XOR only available for bytes sources"),
         };
         cpu.registers.f.zero = cpu.registers.a == 0;
-        cpu.registers.f.subtract=false;
-        cpu.registers.f.carry=false;
-        cpu.registers.f.half_carry=false;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = false;
+        cpu.registers.f.half_carry = false;
         4
     }
 }
