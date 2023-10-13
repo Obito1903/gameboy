@@ -1358,6 +1358,8 @@ impl Instruction {
             Self::RRA => Self::rra(cpu),
             Self::RRC(target) => Self::rrc(cpu, *target),
             Self::RRCA => Self::rrca(cpu),
+            Self::SLA(target) => Self::sla(cpu, *target),
+            Self::SRA(target) => Self::sra(cpu, *target),
             Self::NOP => 4,
             Self::STOP => 4,
             _ => 0,
@@ -1693,7 +1695,7 @@ impl Instruction {
         let cycle = 8;
 
         let (mut new_value, new_carry) = match target.get(cpu) {
-            TargetSize::Byte(target_value) => (target_value.overflowing_shr(1)),
+            TargetSize::Byte(target_value) => target_value.overflowing_shr(1),
             _ => panic!("RRC is only available for bytes targets"),
         };
 
@@ -1739,12 +1741,40 @@ impl Instruction {
         todo!("SET not implemented")
     }
 
+    ///Shift n left into Carry. LSB of target set to 0
     fn sla(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SLA not implemented")
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b1000_0000 != 0;
+                let new_value = target_value << 1;
+                (new_carry, new_value)
+
+            }
+            _ => panic!("SLA is only available for bytes targets"),
+        };
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        8
     }
 
+    /// Shift n right into Carry. 
     fn sra(cpu: &mut CPU, target: OperandTypes) -> u8 {
-        todo!("SRA not implemented")
+        let (new_carry, new_value) = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let new_carry = target_value & 0b0000_0001 != 0;
+                let new_value = target_value >> 1;
+                (new_carry, new_value)
+            }
+            _ => panic!("SRA is only available for bytes targets"),
+        };
+        target.set(cpu, TargetSize::Byte(new_value));
+        cpu.registers.f.zero = new_value == 0;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.carry = new_carry;
+        8
+    
     }
 
     fn stop(cpu: &mut CPU) -> u8 {
