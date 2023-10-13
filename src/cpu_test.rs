@@ -103,6 +103,256 @@ mod cpu_tests {
     }
 
     #[test]
+    fn cp() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.registers.b = 0x02;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xB8);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0x01);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn cp_hl() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.registers.set_hl(0x02);
+        cpu.memory_bus.write_byte(0x0000, 0xBE);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0x01);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+    #[test]
+    fn cp_zero() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.registers.b = 0x01;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xB8);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0x01);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn cpl() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x00;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x2F);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0xFF);
+        assert_eq!(cpu.registers.f.subtract, true);
+        assert_eq!(cpu.registers.f.half_carry, true);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn inc() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x00;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x3C);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b0000_0001);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn dec() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x3D);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0x00);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.registers.f.subtract, true);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn dec_zero() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0x01;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x3D);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0x00);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.registers.f.subtract, true);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.program_counter, 0x0002);
+    }
+
+    #[test]
+    fn rl() {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b1000_0000;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+    #[test]
+    fn rr() {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x18);
+
+        cpu.memory_bus.write_byte(0x0002, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn rla() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b1000_0000;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x17);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn rra() {
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x1F);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn rlc() {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b1000_0000;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x00);
+        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0000_0001);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+    #[test]
+    fn rrc()
+    {
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x08);
+        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b1000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn rrca(){
+        let mut cpu = CPU::new();
+        cpu.registers.a = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0x0F);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.a, 0b1000_0000);
+        assert_eq!(cpu.registers.f.zero, false);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, false);
+    }
+
+    #[test]
+    fn sla(){
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b1000_0000;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x20);
+        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
+    fn sra(){
+        let mut cpu = CPU::new();
+        cpu.registers.b = 0b0000_0001;
+        cpu.registers.f.carry = true;
+        cpu.program_counter = 0x0000;
+        cpu.memory_bus.write_byte(0x0000, 0xCB);
+        cpu.memory_bus.write_byte(0x0001, 0x28);
+        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.run(4.194304);
+        assert_eq!(cpu.registers.b, 0b0000_0000);
+        assert_eq!(cpu.registers.f.zero, true);
+        assert_eq!(cpu.registers.f.subtract, false);
+        assert_eq!(cpu.registers.f.half_carry, false);
+        assert_eq!(cpu.registers.f.carry, true);
+    }
+
+    #[test]
     fn bit_6_h() {
         let mut cpu = CPU::new();
         cpu.registers.h = 0b0100_0000;
