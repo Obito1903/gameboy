@@ -2181,6 +2181,23 @@ impl MemoryBus {
             self.joypad_flags.buttons = true;
         }
     }
+
+    pub fn load_boot_rom(&mut self, boot_rom: &[u8]) {
+        self.memory[..boot_rom.len()].copy_from_slice(boot_rom);
+    }
+
+    pub fn load_rom(&mut self, rom: &[u8]) {
+        self.memory[0x0100..(rom.len() + 0x0100)].copy_from_slice(rom);
+    }
+
+    pub fn print_section(&self, start: u16, end: u16) {
+        for i in (start..end).step_by(16) {
+            for j in 0..16 {
+                print!("{:02x} ", self.memory[(i + j) as usize]);
+            }
+            println!();
+        }
+    }
 }
 
 pub struct CPU {
