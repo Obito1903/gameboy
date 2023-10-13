@@ -52,6 +52,54 @@ impl std::convert::From<u8> for FlagsRegister {
     }
 }
 
+pub struct InteruptsFlags {
+    pub v_blank: bool,
+    pub lcd_stat: bool,
+    pub timer: bool,
+    pub serial: bool,
+    pub joypad: bool,
+}
+
+impl InteruptsFlags {
+    fn new() -> Self {
+        Self {
+            v_blank: false,
+            lcd_stat: false,
+            timer: false,
+            serial: false,
+            joypad: false,
+        }
+    }
+}
+
+impl std::convert::From<InteruptsFlags> for u8 {
+    fn from(flag: InteruptsFlags) -> u8 {
+        (if flag.v_blank { 1 } else { 0 }) << 0
+            | (if flag.lcd_stat { 1 } else { 0 }) << 1
+            | (if flag.timer { 1 } else { 0 }) << 2
+            | (if flag.serial { 1 } else { 0 }) << 3
+            | (if flag.joypad { 1 } else { 0 }) << 4
+    }
+}
+
+impl std::convert::From<u8> for InteruptsFlags {
+    fn from(byte: u8) -> Self {
+        let v_blank = ((byte >> 0) & 0b1) != 0;
+        let lcd_stat = ((byte >> 1) & 0b1) != 0;
+        let timer = ((byte >> 2) & 0b1) != 0;
+        let serial = ((byte >> 3) & 0b1) != 0;
+        let joypad = ((byte >> 4) & 0b1) != 0;
+
+        InteruptsFlags {
+            v_blank,
+            lcd_stat,
+            timer,
+            serial,
+            joypad,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Register {
     pub a: u8,
@@ -202,6 +250,19 @@ enum FlagOperand {
     NC,
 }
 
+impl FlagOperand {
+    fn get(&self, cpu: &CPU) -> bool {
+        match self {
+            Self::Zero => cpu.registers.f.zero,
+            Self::Subtract => cpu.registers.f.subtract,
+            Self::HalfCarry => cpu.registers.f.half_carry,
+            Self::Carry => cpu.registers.f.carry,
+            Self::NZ => !cpu.registers.f.zero,
+            Self::NC => !cpu.registers.f.carry,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum OperandTypes {
     Flags(FlagOperand),
@@ -267,7 +328,7 @@ enum Instruction {
     ADC(OperandTypes, OperandTypes),
     AND(OperandTypes),
     BIT(u8, OperandTypes),
-    CALL(Option<OperandTypes>, OperandTypes),
+    CALL(Option<FlagOperand>, OperandTypes),
     CCF,
     CP(OperandTypes),
     CPL,
@@ -277,15 +338,15 @@ enum Instruction {
     EI,
     HALT,
     INC(OperandTypes),
-    JR(Option<OperandTypes>, OperandTypes),
-    JP(Option<OperandTypes>, OperandTypes),
+    JR(Option<FlagOperand>, OperandTypes),
+    JP(Option<FlagOperand>, OperandTypes),
     LD(OperandTypes, OperandTypes),
     NOP,
     OR(OperandTypes),
     POP(OperandTypes),
     PUSH(OperandTypes),
     RES(u8, OperandTypes),
-    RET(Option<OperandTypes>),
+    RET(Option<FlagOperand>),
     RETI,
     RL(OperandTypes),
     RLA,
@@ -387,7 +448,7 @@ impl Instruction {
             ),
             0x1F => Self::RRA,
             0x20 => Self::JR(
-                Some(OperandTypes::Flags(FlagOperand::NZ)),
+                Some(FlagOperand::NZ),
                 OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0x21 => Self::LD(
@@ -407,7 +468,7 @@ impl Instruction {
             ),
             0x27 => Self::DAA,
             0x28 => Self::JR(
-                Some(OperandTypes::Flags(FlagOperand::Zero)),
+                Some(FlagOperand::Zero),
                 OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0x29 => Self::ADD(
@@ -427,7 +488,7 @@ impl Instruction {
             ),
             0x2F => Self::CPL,
             0x30 => Self::JR(
-                Some(OperandTypes::Flags(FlagOperand::NC)),
+                Some(FlagOperand::NC),
                 OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0x31 => Self::LD(
@@ -447,7 +508,7 @@ impl Instruction {
             ),
             0x37 => Self::SCF,
             0x38 => Self::JR(
-                Some(OperandTypes::Flags(FlagOperand::Carry)),
+                Some(FlagOperand::Carry),
                 OperandTypes::R8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0x39 => Self::ADD(
@@ -855,15 +916,15 @@ impl Instruction {
             0xBD => Self::CP(OperandTypes::Register(RegisterName::L)),
             0xBE => Self::CP(OperandTypes::Memory(RegisterPair::HL.get(cpu))),
             0xBF => Self::CP(OperandTypes::Register(RegisterName::A)),
-            0xC0 => Self::RET(Some(OperandTypes::Flags(FlagOperand::NZ))),
+            0xC0 => Self::RET(Some(FlagOperand::NZ)),
             0xC1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::BC)),
             0xC2 => Self::JP(
-                Some(OperandTypes::Flags(FlagOperand::NZ)),
+                Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xC3 => Self::JP(None, OperandTypes::D16(cpu.memory_bus.read_word(pc + 1))),
             0xC4 => Self::CALL(
-                Some(OperandTypes::Flags(FlagOperand::NZ)),
+                Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xC5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::BC)),
@@ -872,14 +933,14 @@ impl Instruction {
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0xC7 => Self::RST(OperandTypes::D8(0x00)),
-            0xC8 => Self::RET(Some(OperandTypes::Flags(FlagOperand::Zero))),
+            0xC8 => Self::RET(Some(FlagOperand::Zero)),
             0xC9 => Self::RET(None),
             0xCA => Self::JP(
-                Some(OperandTypes::Flags(FlagOperand::Zero)),
+                Some(FlagOperand::Zero),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xCC => Self::CALL(
-                Some(OperandTypes::Flags(FlagOperand::Zero)),
+                Some(FlagOperand::Zero),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xCD => Self::CALL(None, OperandTypes::D16(cpu.memory_bus.read_word(pc + 1))),
@@ -888,27 +949,27 @@ impl Instruction {
                 OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1)),
             ),
             0xCF => Self::RST(OperandTypes::D8(0x08)),
-            0xD0 => Self::RET(Some(OperandTypes::Flags(FlagOperand::NC))),
+            0xD0 => Self::RET(Some(FlagOperand::NC)),
             0xD1 => Self::POP(OperandTypes::RegisterPair(RegisterPair::DE)),
             0xD2 => Self::JP(
-                Some(OperandTypes::Flags(FlagOperand::NC)),
+                Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xD4 => Self::CALL(
-                Some(OperandTypes::Flags(FlagOperand::NC)),
+                Some(FlagOperand::NC),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xD5 => Self::PUSH(OperandTypes::RegisterPair(RegisterPair::DE)),
             0xD6 => Self::SUB(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xD7 => Self::RST(OperandTypes::D8(0x10)),
-            0xD8 => Self::RET(Some(OperandTypes::Flags(FlagOperand::Carry))),
+            0xD8 => Self::RET(Some(FlagOperand::Carry)),
             0xD9 => Self::RETI,
             0xDA => Self::JP(
-                Some(OperandTypes::Flags(FlagOperand::Carry)),
+                Some(FlagOperand::Carry),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xDC => Self::CALL(
-                Some(OperandTypes::Flags(FlagOperand::Carry)),
+                Some(FlagOperand::Carry),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
             0xDE => Self::SBC(
@@ -1346,10 +1407,26 @@ impl Instruction {
             Self::ADC(target, source) => Self::adc(cpu, *target, *source),
             Self::AND(source) => Self::and(cpu, *source),
             Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
-            Self::INC(target) => Self::inc(cpu, *target),
-            Self::DEC(target) => Self::dec(cpu, *target),
+            Self::CALL(condition, address) => Self::call(cpu, *condition, *address),
+            Self::CCF => Self::ccf(cpu),
             Self::CP(source) => Self::cp(cpu, *source),
             Self::CPL => Self::cpl(cpu),
+            Self::DAA => Self::daa(cpu),
+            Self::DEC(target) => Self::dec(cpu, *target),
+            Self::DI => Self::di(cpu),
+            Self::EI => Self::ei(cpu),
+            Self::HALT => Self::halt(cpu),
+            Self::INC(target) => Self::inc(cpu, *target),
+            Self::JR(condition, offset) => Self::jr(cpu, *condition, *offset),
+            Self::JP(condition, address) => Self::jp(cpu, *condition, *address),
+            Self::LD(target, source) => Self::ld(cpu, *target, *source),
+            Self::NOP => Self::nop(cpu),
+            Self::OR(source) => Self::or(cpu, *source),
+            Self::POP(target) => Self::pop(cpu, *target),
+            Self::PUSH(source) => Self::push(cpu, *source),
+            Self::RES(bit, target) => Self::res(cpu, *bit, *target),
+            Self::RET(condition) => Self::ret(cpu, *condition),
+            Self::RETI => Self::reti(cpu),
             Self::RL(target) => Self::rl(cpu, *target),
             Self::RLA => Self::rla(cpu),
             Self::RLC(target) => Self::rlc(cpu, *target),
@@ -1358,14 +1435,22 @@ impl Instruction {
             Self::RRA => Self::rra(cpu),
             Self::RRC(target) => Self::rrc(cpu, *target),
             Self::RRCA => Self::rrca(cpu),
+            Self::RST(address) => Self::rst(cpu, *address),
+            Self::SBC(target, source) => Self::sbc(cpu, *target, *source),
+            Self::SCF => Self::scf(cpu),
+            Self::SET(bit, target) => Self::set(cpu, *bit, *target),
             Self::SLA(target) => Self::sla(cpu, *target),
             Self::SRA(target) => Self::sra(cpu, *target),
-            Self::NOP => 4,
-            Self::STOP => 4,
+            Self::SRL(target) => Self::srl(cpu, *target),
+            Self::STOP => Self::stop(cpu),
+            Self::SUB(source) => Self::sub(cpu, *source),
+            Self::SWAP(target) => Self::swap(cpu, *target),
+            Self::XOR(source) => Self::xor(cpu, *source),
             _ => 0,
         }
     }
 
+    #[inline]
     fn add(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
         let mut cycle = 4;
         let (zero, overflow) = match target.get(cpu) {
@@ -1404,6 +1489,12 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
+    fn add_sp(cpu: &mut CPU, offset: OperandTypes) -> u8 {
+        todo!("ADD SP not implemented")
+    }
+
+    #[inline]
     fn adc(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
         let (zero, overflow) = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
@@ -1434,6 +1525,7 @@ impl Instruction {
         }
     }
 
+    #[inline]
     fn and(cpu: &mut CPU, source: OperandTypes) -> u8 {
         let new_value = match source.get(cpu) {
             TargetSize::Byte(source_value) => cpu.registers.a & source_value,
@@ -1450,19 +1542,56 @@ impl Instruction {
         }
     }
 
+    #[inline]
     fn bit(cpu: &mut CPU, bit: u8, source: OperandTypes) -> u8 {
-        todo!("BIT not implemented")
+        let (is_set, cycles) = match source.get(cpu) {
+            TargetSize::Byte(source_value) => (source_value & (1 << bit) != 0, 8),
+            TargetSize::Word(source_value) => (source_value & (1 << bit) != 0, 16),
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cpu.registers.f.zero = !is_set;
+        cpu.registers.f.subtract = false;
+        cpu.registers.f.half_carry = true;
+        cycles
     }
 
-    fn call(cpu: &mut CPU, condition: Option<OperandTypes>, address: OperandTypes) -> u8 {
-        todo!("Call not implemented")
+    #[inline]
+    fn call(cpu: &mut CPU, condition: Option<FlagOperand>, address: OperandTypes) -> u8 {
+        let call_impl = |cpu: &mut CPU, address: OperandTypes| {
+            let address = match address {
+                OperandTypes::D16(address) => address,
+                OperandTypes::A16(address) => address,
+
+                _ => panic!("CALL only available for 16 bits addresses"),
+            };
+            // cpu.stack_pointer -= 1;
+            cpu.push_word(cpu.program_counter);
+            cpu.program_counter = address;
+        };
+
+        match condition {
+            Some(flag) => {
+                if flag.get(cpu) {
+                    call_impl(cpu, address);
+                    24
+                } else {
+                    12
+                }
+            }
+            None => {
+                call_impl(cpu, address);
+                24
+            }
+        }
     }
 
+    #[inline]
     fn ccf(cpu: &mut CPU) -> u8 {
         todo!("CCF not implemented")
     }
 
     ///Subtracts from the 8-bit A register, the 8-bit register r, and updates flags based on the result.
+    #[inline]
     fn cp(cpu: &mut CPU, source: OperandTypes) -> u8 {
         let cycle = 8;
         let (zero, overflow) = match source.get(cpu) {
@@ -1478,6 +1607,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn cpl(cpu: &mut CPU) -> u8 {
         let cycle = 4;
         cpu.registers.a = !cpu.registers.a;
@@ -1486,10 +1616,12 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn daa(cpu: &mut CPU) -> u8 {
         todo!("DAA not implemented")
     }
 
+    #[inline]
     fn dec(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 4;
         let (zero, overflow) = match target.get(cpu) {
@@ -1511,18 +1643,24 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn di(cpu: &mut CPU) -> u8 {
-        todo!("DI not implemented")
+        cpu.interupt_master_enable = false;
+        4
     }
 
+    #[inline]
     fn ei(cpu: &mut CPU) -> u8 {
-        todo!("EI not implemented")
+        cpu.interupt_master_enable = true;
+        4
     }
 
+    #[inline]
     fn halt(cpu: &mut CPU) -> u8 {
         todo!("HALT not implemented")
     }
 
+    #[inline]
     fn inc(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 4;
 
@@ -1547,46 +1685,72 @@ impl Instruction {
         cycle
     }
 
-    fn jr(cpu: &mut CPU, condition: Option<OperandTypes>, offset: OperandTypes) -> u8 {
+    #[inline]
+    fn jr(cpu: &mut CPU, condition: Option<FlagOperand>, offset: OperandTypes) -> u8 {
         todo!("JR not implemented")
     }
 
-    fn jp(cpu: &mut CPU, condition: Option<OperandTypes>, address: OperandTypes) -> u8 {
+    #[inline]
+    fn jp(cpu: &mut CPU, condition: Option<FlagOperand>, address: OperandTypes) -> u8 {
         todo!("JP not implemented")
     }
 
+    #[inline]
     fn ld(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
         todo!("LD not implemented")
     }
 
+    #[inline]
     fn nop(cpu: &mut CPU) -> u8 {
         todo!("NOP not implemented")
     }
 
+    #[inline]
     fn or(cpu: &mut CPU, source: OperandTypes) -> u8 {
         todo!("OR not implemented")
     }
 
+    #[inline]
     fn pop(cpu: &mut CPU, target: OperandTypes) -> u8 {
         todo!("POP not implemented")
     }
 
+    #[inline]
     fn push(cpu: &mut CPU, target: OperandTypes) -> u8 {
         todo!("PUSH not implemented")
     }
 
+    #[inline]
     fn res(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("RES not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = !(1 << bit);
+                 let new_value = target_value & bitmask;
+                 target.set(cpu, TargetSize::Byte(new_value));
+                  8
+            },
+            TargetSize::Word(target_value) => {
+                let bitmask = !(1 << bit);
+                 let new_value = target_value & bitmask;
+                 target.set(cpu, TargetSize::Word(new_value));
+                  16
+            },
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
-    fn ret(cpu: &mut CPU, condition: Option<OperandTypes>) -> u8 {
+    #[inline]
+    fn ret(cpu: &mut CPU, condition: Option<FlagOperand>) -> u8 {
         todo!("RET not implemented")
     }
 
+    #[inline]
     fn reti(cpu: &mut CPU) -> u8 {
         todo!("RETI not implemented")
     }
 
+    #[inline]
     fn rl(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
 
@@ -1606,6 +1770,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rla(cpu: &mut CPU) -> u8 {
         let cycle = 4;
 
@@ -1621,6 +1786,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rlc(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
 
@@ -1640,6 +1806,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rlca(cpu: &mut CPU) -> u8 {
         let cycle = 4;
 
@@ -1656,6 +1823,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rr(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
 
@@ -1676,6 +1844,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rra(cpu: &mut CPU) -> u8 {
         let cycle = 4;
 
@@ -1691,6 +1860,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rrc(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let cycle = 8;
 
@@ -1710,6 +1880,7 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rrca(cpu: &mut CPU) -> u8 {
         let cycle = 4;
 
@@ -1725,23 +1896,43 @@ impl Instruction {
         cycle
     }
 
+    #[inline]
     fn rst(cpu: &mut CPU, address: OperandTypes) -> u8 {
         todo!("RST not implemented")
     }
 
+    #[inline]
     fn sbc(cpu: &mut CPU, target: OperandTypes, source: OperandTypes) -> u8 {
         todo!("SBC not implemented")
     }
 
+    #[inline]
     fn scf(cpu: &mut CPU) -> u8 {
         todo!("SCF not implemented")
     }
 
+    #[inline]
     fn set(cpu: &mut CPU, bit: u8, target: OperandTypes) -> u8 {
-        todo!("SET not implemented")
+        let cycles = match target.get(cpu) {
+            TargetSize::Byte(target_value) => {
+                let bitmask = 1 << bit;
+                 let new_value = target_value | bitmask;
+                 target.set(cpu, TargetSize::Byte(new_value));
+                  8
+            },
+            TargetSize::Word(target_value) => {
+                let bitmask = 1 << bit;
+                 let new_value = target_value | bitmask;
+                 target.set(cpu, TargetSize::Word(new_value));
+                  16
+            },
+            _ => panic!("BIT only available for bytes sources"),
+        };
+        cycles
     }
 
     ///Shift n left into Carry. LSB of target set to 0
+    #[inline]
     fn sla(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let (new_carry, new_value) = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
@@ -1760,6 +1951,7 @@ impl Instruction {
     }
 
     /// Shift n right into Carry. 
+    #[inline]
     fn sra(cpu: &mut CPU, target: OperandTypes) -> u8 {
         let (new_carry, new_value) = match target.get(cpu) {
             TargetSize::Byte(target_value) => {
@@ -1777,21 +1969,38 @@ impl Instruction {
     
     }
 
+    #[inline]
+    fn srl(cpu: &mut CPU, target: OperandTypes) -> u8 {
+        todo!("SRL not implemented")
+    }
+
+    #[inline]
     fn stop(cpu: &mut CPU) -> u8 {
         todo!("STOP not implemented")
     }
 
+    #[inline]
     fn sub(cpu: &mut CPU, source: OperandTypes) -> u8 {
         todo!("SUB not implemented")
     }
 
+    #[inline]
     fn swap(cpu: &mut CPU, target: OperandTypes) -> u8 {
         todo!("SWAP not implemented")
     }
 
+    #[inline]
     fn xor(cpu: &mut CPU, source: OperandTypes) -> u8 {
         todo!("XOR not implemented")
     }
+}
+
+pub enum InteruptEnableRegister {
+    VBlank,
+    LCDStat,
+    Timer,
+    Serial,
+    Joypad,
 }
 
 pub struct MemoryBus {
@@ -1805,11 +2014,11 @@ impl MemoryBus {
         }
     }
 
-    fn read_byte(&self, address: u16) -> u8 {
+    pub fn read_byte(&self, address: u16) -> u8 {
         self.memory[address as usize]
     }
 
-    fn read_word(&self, address: u16) -> u16 {
+    pub fn read_word(&self, address: u16) -> u16 {
         (self.read_byte(address) as u16) << 8 | self.read_byte(address + 1) as u16
     }
 
@@ -1824,12 +2033,45 @@ impl MemoryBus {
         self.write_byte(addr, (word >> 8) as u8);
         self.write_byte(addr + 1, word as u8);
     }
+
+    pub fn read_interupt_enable(&self, interupt: InteruptEnableRegister) -> bool {
+        let register = self.read_byte(0xFFFF);
+        match interupt {
+            InteruptEnableRegister::VBlank => register & 0b0000_0001 != 0,
+            InteruptEnableRegister::LCDStat => register & 0b0000_0010 != 0,
+            InteruptEnableRegister::Timer => register & 0b0000_0100 != 0,
+            InteruptEnableRegister::Serial => register & 0b0000_1000 != 0,
+            InteruptEnableRegister::Joypad => register & 0b0001_0000 != 0,
+        }
+    }
+
+    pub fn write_interupt_enable(&mut self, interupt: InteruptEnableRegister, value: bool) {
+        match interupt {
+            InteruptEnableRegister::VBlank => {
+                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1110) | (value as u8)
+            }
+            InteruptEnableRegister::LCDStat => {
+                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1101) | ((value as u8) << 1)
+            }
+            InteruptEnableRegister::Timer => {
+                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_1011) | ((value as u8) << 2)
+            }
+            InteruptEnableRegister::Serial => {
+                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1111_0111) | ((value as u8) << 3)
+            }
+            InteruptEnableRegister::Joypad => {
+                self.memory[0xFFFF] = (self.memory[0xFFFF] & 0b1110_1111) | ((value as u8) << 4)
+            }
+        }
+    }
 }
 
 pub struct CPU {
     pub registers: Register,
     pub program_counter: u16,
     pub stack_pointer: u16,
+    pub interupt_master_enable: bool,
+    pub iterupts_flags: InteruptsFlags,
     pub memory_bus: MemoryBus,
 }
 
@@ -1838,7 +2080,9 @@ impl CPU {
         Self {
             registers: Register::new(),
             program_counter: 0,
-            stack_pointer: 0,
+            stack_pointer: 0xFFFF,
+            interupt_master_enable: false,
+            iterupts_flags: InteruptsFlags::new(),
             memory_bus: MemoryBus::new(),
         }
     }
@@ -1855,8 +2099,8 @@ impl CPU {
                 None
             }
             _ => {
-                let cycles = instruction.execute(self);
                 self.advance_pc(instruction.nb_bytes());
+                let cycles = instruction.execute(self);
                 Some(cycles)
             }
         }
@@ -1864,7 +2108,48 @@ impl CPU {
 
     pub fn run(&mut self, mhz: f32) {
         let cycles_per_second = mhz * 1_000_000.0;
+
         loop {
+            // handle interupts
+            if self.interupt_master_enable {
+                if self
+                    .memory_bus
+                    .read_interupt_enable(InteruptEnableRegister::VBlank)
+                    && self.iterupts_flags.v_blank
+                {
+                    self.iterupts_flags.v_blank = false;
+                    todo!("VBlank interupt not implemented")
+                } else if self
+                    .memory_bus
+                    .read_interupt_enable(InteruptEnableRegister::LCDStat)
+                    && self.iterupts_flags.lcd_stat
+                {
+                    self.iterupts_flags.lcd_stat = false;
+                    todo!("LCDStat interupt not implemented")
+                } else if self
+                    .memory_bus
+                    .read_interupt_enable(InteruptEnableRegister::Timer)
+                    && self.iterupts_flags.timer
+                {
+                    self.iterupts_flags.timer = false;
+                    todo!("Timer interupt not implemented")
+                } else if self
+                    .memory_bus
+                    .read_interupt_enable(InteruptEnableRegister::Serial)
+                    && self.iterupts_flags.serial
+                {
+                    self.iterupts_flags.serial = false;
+                    todo!("Serial interupt not implemented")
+                } else if self
+                    .memory_bus
+                    .read_interupt_enable(InteruptEnableRegister::Joypad)
+                    && self.iterupts_flags.joypad
+                {
+                    self.iterupts_flags.joypad = false;
+                    todo!("Joypad interupt not implemented")
+                }
+            }
+
             match self.read_instruction() {
                 Some(cycles) => {
                     let seconds = cycles as f32 / cycles_per_second;
@@ -1907,12 +2192,15 @@ impl CPU {
     }
 
     // Stack
-    fn push(&mut self, value: u16) {
-        todo!("Push not implemented")
+    fn push_word(&mut self, value: u16) {
+        self.stack_pointer -= 2;
+        self.memory_bus.write_word(self.stack_pointer, value);
     }
 
-    fn pop(&mut self) -> u16 {
-        todo!("Pop not implemented")
+    fn pop_word(&mut self) -> u16 {
+        let value = self.memory_bus.read_word(self.stack_pointer);
+        self.stack_pointer += 2;
+        value
     }
 }
 
