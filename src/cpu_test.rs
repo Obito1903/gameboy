@@ -276,7 +276,7 @@ mod cpu_tests {
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xCB);
         cpu.memory_bus.write_byte(0x0001, 0x00);
-        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.memory_bus.write_byte(0x0002, 0x10);
         cpu.run(4.194304);
         assert_eq!(cpu.registers.b, 0b0000_0001);
         assert_eq!(cpu.registers.f.zero, false);
@@ -293,7 +293,7 @@ mod cpu_tests {
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xCB);
         cpu.memory_bus.write_byte(0x0001, 0x08);
-        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.memory_bus.write_byte(0x0002, 0x10);
         cpu.run(4.194304);
         assert_eq!(cpu.registers.b, 0b1000_0000);
         assert_eq!(cpu.registers.f.zero, false);
@@ -326,7 +326,7 @@ mod cpu_tests {
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xCB);
         cpu.memory_bus.write_byte(0x0001, 0x20);
-        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.memory_bus.write_byte(0x0002, 0x10);
         cpu.run(4.194304);
         assert_eq!(cpu.registers.b, 0b0000_0000);
         assert_eq!(cpu.registers.f.zero, true);
@@ -343,7 +343,7 @@ mod cpu_tests {
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0xCB);
         cpu.memory_bus.write_byte(0x0001, 0x28);
-        cpu.memory_bus.write_byte(0x0004, 0x10);
+        cpu.memory_bus.write_byte(0x0002, 0x10);
         cpu.run(4.194304);
         assert_eq!(cpu.registers.b, 0b0000_0000);
         assert_eq!(cpu.registers.f.zero, true);
