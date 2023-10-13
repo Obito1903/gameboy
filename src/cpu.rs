@@ -1406,51 +1406,56 @@ impl Instruction {
 
     // Return the clock cycles taken by the instruction
     fn execute(&self, cpu: &mut CPU) -> u8 {
-        match self {
-            Self::ADD(target, source) => Self::add(cpu, *target, *source),
-            Self::ADC(target, source) => Self::adc(cpu, *target, *source),
-            Self::AND(source) => Self::and(cpu, *source),
-            Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
-            Self::CALL(condition, address) => Self::call(cpu, *condition, *address),
-            Self::CCF => Self::ccf(cpu),
-            Self::CP(source) => Self::cp(cpu, *source),
-            Self::CPL => Self::cpl(cpu),
-            Self::DAA => Self::daa(cpu),
-            Self::DEC(target) => Self::dec(cpu, *target),
-            Self::DI => Self::di(cpu),
-            Self::EI => Self::ei(cpu),
-            Self::HALT => Self::halt(cpu),
-            Self::INC(target) => Self::inc(cpu, *target),
-            Self::JR(condition, offset) => Self::jr(cpu, *condition, *offset),
-            Self::JP(condition, address) => Self::jp(cpu, *condition, *address),
-            Self::LD(target, source) => Self::ld(cpu, *target, *source),
-            Self::NOP => Self::nop(cpu),
-            Self::OR(source) => Self::or(cpu, *source),
-            Self::POP(target) => Self::pop(cpu, *target),
-            Self::PUSH(source) => Self::push(cpu, *source),
-            Self::RES(bit, target) => Self::res(cpu, *bit, *target),
-            Self::RET(condition) => Self::ret(cpu, *condition),
-            Self::RETI => Self::reti(cpu),
-            Self::RL(target) => Self::rl(cpu, *target),
-            Self::RLA => Self::rla(cpu),
-            Self::RLC(target) => Self::rlc(cpu, *target),
-            Self::RLCA => Self::rlca(cpu),
-            Self::RR(target) => Self::rr(cpu, *target),
-            Self::RRA => Self::rra(cpu),
-            Self::RRC(target) => Self::rrc(cpu, *target),
-            Self::RRCA => Self::rrca(cpu),
-            Self::RST(address) => Self::rst(cpu, *address),
-            Self::SBC(source) => Self::sbc(cpu, *source),
-            Self::SCF => Self::scf(cpu),
-            Self::SET(bit, target) => Self::set(cpu, *bit, *target),
-            Self::SLA(target) => Self::sla(cpu, *target),
-            Self::SRA(target) => Self::sra(cpu, *target),
-            Self::SRL(target) => Self::srl(cpu, *target),
-            Self::STOP => Self::stop(cpu),
-            Self::SUB(source) => Self::sub(cpu, *source),
-            Self::SWAP(target) => Self::swap(cpu, *target),
-            Self::XOR(source) => Self::xor(cpu, *source),
-            _ => 0,
+        if !cpu.is_halted {
+            match self {
+                Self::ADD(target, source) => Self::add(cpu, *target, *source),
+                Self::ADC(target, source) => Self::adc(cpu, *target, *source),
+                Self::AND(source) => Self::and(cpu, *source),
+                Self::BIT(bit, source) => Self::bit(cpu, *bit, *source),
+                Self::CALL(condition, address) => Self::call(cpu, *condition, *address),
+                Self::CCF => Self::ccf(cpu),
+                Self::CP(source) => Self::cp(cpu, *source),
+                Self::CPL => Self::cpl(cpu),
+                Self::DAA => Self::daa(cpu),
+                Self::DEC(target) => Self::dec(cpu, *target),
+                Self::DI => Self::di(cpu),
+                Self::EI => Self::ei(cpu),
+                Self::HALT => Self::halt(cpu),
+                Self::INC(target) => Self::inc(cpu, *target),
+                Self::JR(condition, offset) => Self::jr(cpu, *condition, *offset),
+                Self::JP(condition, address) => Self::jp(cpu, *condition, *address),
+                Self::LD(target, source) => Self::ld(cpu, *target, *source),
+                Self::NOP => Self::nop(cpu),
+                Self::OR(source) => Self::or(cpu, *source),
+                Self::POP(target) => Self::pop(cpu, *target),
+                Self::PUSH(source) => Self::push(cpu, *source),
+                Self::RES(bit, target) => Self::res(cpu, *bit, *target),
+                Self::RET(condition) => Self::ret(cpu, *condition),
+                Self::RETI => Self::reti(cpu),
+                Self::RL(target) => Self::rl(cpu, *target),
+                Self::RLA => Self::rla(cpu),
+                Self::RLC(target) => Self::rlc(cpu, *target),
+                Self::RLCA => Self::rlca(cpu),
+                Self::RR(target) => Self::rr(cpu, *target),
+                Self::RRA => Self::rra(cpu),
+                Self::RRC(target) => Self::rrc(cpu, *target),
+                Self::RRCA => Self::rrca(cpu),
+                Self::RST(address) => Self::rst(cpu, *address),
+                Self::SBC(source) => Self::sbc(cpu, *source),
+                Self::SCF => Self::scf(cpu),
+                Self::SET(bit, target) => Self::set(cpu, *bit, *target),
+                Self::SLA(target) => Self::sla(cpu, *target),
+                Self::SRA(target) => Self::sra(cpu, *target),
+                Self::SRL(target) => Self::srl(cpu, *target),
+                Self::STOP => Self::stop(cpu),
+                Self::SUB(source) => Self::sub(cpu, *source),
+                Self::SWAP(target) => Self::swap(cpu, *target),
+                Self::XOR(source) => Self::xor(cpu, *source),
+                _ => 0,
+            }
+        } else {
+            // CPU is halted, do nothing
+            0
         }
     }
 
@@ -1685,7 +1690,8 @@ impl Instruction {
 
     #[inline]
     fn halt(cpu: &mut CPU) -> u8 {
-        todo!("HALT not implemented")
+        cpu.is_halted = true;
+        4
     }
 
     #[inline]
@@ -2287,6 +2293,7 @@ pub struct CPU {
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
     pub memory_bus: MemoryBus,
+    pub is_halted: bool,
 }
 
 impl CPU {
@@ -2297,6 +2304,7 @@ impl CPU {
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
             memory_bus: MemoryBus::new(),
+            is_halted: false,
         }
     }
 
