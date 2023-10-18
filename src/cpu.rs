@@ -133,6 +133,83 @@ impl JoypadFlags {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct LCDControlFlags {
+    pub lcd_enable: bool,
+    pub window_tile_map: bool,
+    pub window_enable: bool,
+    pub bg_window_tile_data: bool,
+    pub bg_tile_map: bool,
+    pub sprite_size: bool,
+    pub sprite_enable: bool,
+    pub bg_enable: bool,
+}
+
+impl LCDControlFlags {
+    fn new() -> Self {
+        Self {
+            lcd_enable: false,
+            window_tile_map: false,
+            window_enable: false,
+            bg_window_tile_data: false,
+            bg_tile_map: false,
+            sprite_size: false,
+            sprite_enable: false,
+            bg_enable: false,
+        }
+    }
+
+    fn to_u8(&self) -> u8 {
+        let mut result = 0;
+        if self.lcd_enable {
+            result |= 0b1000_0000;
+        }
+        if self.window_tile_map {
+            result |= 0b0100_0000;
+        }
+        if self.window_enable {
+            result |= 0b0010_0000;
+        }
+        if self.bg_window_tile_data {
+            result |= 0b0001_0000;
+        }
+        if self.bg_tile_map {
+            result |= 0b0000_1000;
+        }
+        if self.sprite_size {
+            result |= 0b0000_0100;
+        }
+        if self.sprite_enable {
+            result |= 0b0000_0010;
+        }
+        if self.bg_enable {
+            result |= 0b0000_0001;
+        }
+        result
+    }
+}
+
+impl std::convert::From<LCDControlFlags> for u8 {
+    fn from(flag: LCDControlFlags) -> u8 {
+        flag.to_u8()
+    }
+}
+
+impl std::convert::From<u8> for LCDControlFlags {
+    fn from(value: u8) -> Self {
+        Self {
+            lcd_enable: (value & 0b1000_0000) != 0,
+            window_tile_map: (value & 0b0100_0000) != 0,
+            window_enable: (value & 0b0010_0000) != 0,
+            bg_window_tile_data: (value & 0b0001_0000) != 0,
+            bg_tile_map: (value & 0b0000_1000) != 0,
+            sprite_size: (value & 0b0000_0100) != 0,
+            sprite_enable: (value & 0b0000_0010) != 0,
+            bg_enable: (value & 0b0000_0001) != 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Register {
     pub a: u8,
     pub b: u8,
@@ -1802,7 +1879,7 @@ impl Instruction {
     fn reti(cpu: &mut CPU) -> u8 {
         cpu.ret(true);
         cpu.interupt_master_enable = true;
-        //IME? 
+        //IME?
         16
     }
 
@@ -2144,6 +2221,7 @@ pub struct MemoryBus {
     pub interupt_enable: InteruptsFlags,
     pub interupt_flags: InteruptsFlags,
     pub joypad_flags: JoypadFlags,
+    pub lcd_flags: LCDControlFlags,
 }
 
 impl MemoryBus {
@@ -2153,6 +2231,7 @@ impl MemoryBus {
             interupt_enable: InteruptsFlags::new(),
             interupt_flags: InteruptsFlags::new(),
             joypad_flags: JoypadFlags::new(),
+            lcd_flags: LCDControlFlags::new(),
         }
     }
 
@@ -2176,6 +2255,7 @@ impl MemoryBus {
             0xFF06 => todo!("TMA: Timer Module"),
             0xFF07 => todo!("TAC: Timer control"),
             0xFF0F => self.interupt_flags.into(),
+            0xFF40 => self.lcd_flags.into(),
             0xFF80..=0xFFFE => self.memory[address as usize],
             0xFFFF => self.interupt_enable.into(),
             address => {
@@ -2210,6 +2290,7 @@ impl MemoryBus {
             0xFF06 => todo!("TMA: Timer Module"),
             0xFF07 => todo!("TAC: Timer control"),
             0xFF0F => self.interupt_flags = InteruptsFlags::from(byte),
+            0xFF40 => self.lcd_flags = LCDControlFlags::from(byte),
             0xFF80..=0xFFFE => self.memory[addr as usize] = byte,
             0xFFFF => self.interupt_enable = InteruptsFlags::from(byte),
             addr => {
