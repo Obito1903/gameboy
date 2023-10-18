@@ -3,7 +3,6 @@ use std::{
     ops::{Shl, Shr},
     u8,
 };
-
 #[derive(Debug, Clone, Copy)]
 pub struct FlagsRegister {
     pub zero: bool,
@@ -129,6 +128,55 @@ impl JoypadFlags {
             up: false,
             down: false,
         }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct DividerRegister {
+    count: u16,
+    double_speed: bool, // Indicates whether the CGB double speed mode is enabled.
+}
+
+impl DividerRegister {
+    pub fn new() -> Self {
+        Self {
+            count: 0,
+            double_speed: false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.count = 0;
+    }
+
+    pub fn tick(&mut self, cycles: u16) {
+        // Increment the count based on the speed mode.
+        let speed = if self.double_speed { 32768 } else { 16384 };
+        self.count = (self.count + cycles) % speed;
+        println!("Count: {}", self.count);
+    }
+
+    pub fn read(&self) -> u8 {
+        (self.count) as u8
+    }
+
+    pub fn write(&mut self, _value: u8) {
+        // Writing any value to the divider register resets it to 0x00.
+        self.reset();
+    }
+}
+
+impl std::convert::From<u8> for DividerRegister {
+    fn from(byte: u8) -> Self {
+        Self {
+            count: (byte as u16) << 8,
+            double_speed: false,
+        }
+    }
+}
+
+impl std::convert::From<DividerRegister> for u8 {
+    fn from(divider: DividerRegister) -> Self {
+        (divider.count >> 8) as u8
     }
 }
 
@@ -1802,7 +1850,7 @@ impl Instruction {
     fn reti(cpu: &mut CPU) -> u8 {
         cpu.ret(true);
         cpu.interupt_master_enable = true;
-        //IME? 
+        //IME?
         16
     }
 
@@ -2144,6 +2192,7 @@ pub struct MemoryBus {
     pub interupt_enable: InteruptsFlags,
     pub interupt_flags: InteruptsFlags,
     pub joypad_flags: JoypadFlags,
+    pub divider_register: DividerRegister,
 }
 
 impl MemoryBus {
@@ -2153,6 +2202,7 @@ impl MemoryBus {
             interupt_enable: InteruptsFlags::new(),
             interupt_flags: InteruptsFlags::new(),
             joypad_flags: JoypadFlags::new(),
+            divider_register: DividerRegister::new(),
         }
     }
 
@@ -2171,7 +2221,7 @@ impl MemoryBus {
             0xFF00 => self.read_joypad(),
             0xFF01 => todo!("SB: Serial transfer data"),
             0xFF02 => todo!("SC: Serial transfer control"),
-            0xFF04 => todo!("DIV: Divider register"),
+            0xFF04 => self.divider_register.read().into(),
             0xFF05 => todo!("TIMA: Time counter"),
             0xFF06 => todo!("TMA: Timer Module"),
             0xFF07 => todo!("TAC: Timer control"),
@@ -2180,7 +2230,7 @@ impl MemoryBus {
             0xFFFF => self.interupt_enable.into(),
             address => {
                 eprintln!(
-                    "Address {:#06x?} probably not implemented corrctly",
+                    "Address {:#06x?} probably not implemented correctly",
                     address
                 );
                 self.memory[address as usize]
@@ -2205,7 +2255,7 @@ impl MemoryBus {
             0xE000..=0xFDFF => self.write_byte(addr - 0x2000, byte),
             0xFE00..=0xFEFF => self.memory[addr as usize] = byte,
             0xFF00 => self.write_joypad(byte),
-            0xFF04 => todo!("DIV: Divider register"),
+            0xFF04 => self.divider_register = DividerRegister::from(byte),
             0xFF05 => todo!("TIMA: Time counter"),
             0xFF06 => todo!("TMA: Timer Module"),
             0xFF07 => todo!("TAC: Timer control"),
@@ -2266,6 +2316,10 @@ impl MemoryBus {
             }
             println!();
         }
+    }
+
+    pub fn tick(&mut self, cycles: u16) {
+        self.divider_register.tick(cycles);
     }
 }
 
@@ -2362,12 +2416,18 @@ impl CPU {
             // handle interupts
             self.handle_interupt();
             match self.read_instruction() {
-                Some(cycles) => {
-                    let seconds = cycles as f32 / cycles_per_second;
+                Some(instruction_cycles) => {
+                    // Add the number of cycles the instruction took to the cycle counter.
+                    self.memory_bus.tick(instruction_cycles as u16);
+
+                    let seconds = instruction_cycles as f32 / cycles_per_second;
                     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
                 }
                 None => break,
             }
+
+            // println!("Cycles: {}", cycles);
+
             if self.walk {
                 println!("CPU Registers: {:?}", self.registers);
                 println!("CPU Program Counter: {:#06x?}", self.program_counter);
