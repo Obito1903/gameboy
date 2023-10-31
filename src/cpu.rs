@@ -231,6 +231,7 @@ pub struct LCDControlFlags {
     pub bg_enable: bool,
 }
 
+
 impl LCDControlFlags {
     fn new() -> Self {
         Self {
@@ -295,7 +296,73 @@ impl std::convert::From<u8> for LCDControlFlags {
         }
     }
 }
+#[derive(Debug, Clone, Copy)]
+pub struct LCDStatusFlags {
+    pub lyc_int_select : bool,
+    pub mode_2_int_select : bool,
+    pub mode_1_int_select : bool,
+    pub mode_0_int_select : bool,
+    pub coincidence_flag: bool,
+    pub ppu_mode_flag: u8,
+}
 
+impl LCDStatusFlags {
+    fn new() -> Self {
+        Self {
+            lyc_int_select: false,
+            mode_2_int_select: false,
+            mode_1_int_select: false,
+            mode_0_int_select: false,
+            coincidence_flag: false,
+            ppu_mode_flag: 0,
+        }
+    }
+
+    fn to_u8(&self) -> u8 {
+        let mut result = 0;
+        if self.lyc_int_select {
+            result |= 0b0100_0000;
+        }
+        if self.mode_2_int_select {
+            result |= 0b0010_0000;
+        }
+        if self.mode_1_int_select {
+            result |= 0b0001_0000;
+        }
+        if self.mode_0_int_select {
+            result |= 0b0000_1000;
+        }
+        if self.coincidence_flag {
+            result |= 0b0000_0100;
+        }
+        result |= self.ppu_mode_flag;
+        result
+    }
+
+    fn set_mode(&mut self, mode: u8) {
+        self.ppu_mode_flag = mode & 0b0000_0011;
+    }
+
+}
+
+impl std::convert::From<LCDStatusFlags> for u8 {
+    fn from(flag: LCDStatusFlags) -> u8 {
+        flag.to_u8()
+    }
+}
+
+impl std::convert::From<u8> for LCDStatusFlags {
+    fn from(value: u8) -> Self {
+        Self {
+            lyc_int_select: (value & 0b0100_0000) != 0,
+            mode_2_int_select: (value & 0b0010_0000) != 0,
+            mode_1_int_select: (value & 0b0001_0000) != 0,
+            mode_0_int_select: (value & 0b0000_1000) != 0,
+            coincidence_flag: (value & 0b0000_0100) != 0,
+            ppu_mode_flag: value & 0b0000_0011,
+        }
+    }
+}
 #[derive(Debug, Clone, Copy)]
 pub struct Register {
     pub a: u8,
@@ -2311,6 +2378,7 @@ pub struct MemoryBus {
     pub divider_register: DividerRegister,
     pub timer_control: TimerControl,
     pub lcd_flags: LCDControlFlags,
+    pub lcd_status_flags : LCDStatusFlags,
 }
 
 impl MemoryBus {
@@ -2323,6 +2391,7 @@ impl MemoryBus {
             divider_register: DividerRegister::new(),
             timer_control: TimerControl::new(),
             lcd_flags: LCDControlFlags::new(),
+            lcd_status_flags: LCDStatusFlags::new(),
         }
     }
 
@@ -2347,6 +2416,11 @@ impl MemoryBus {
             0xFF07 => self.timer_control.read().into(),
             0xFF0F => self.interupt_flags.into(),
             0xFF40 => self.lcd_flags.into(),
+            0xFF41 => self.lcd_status_flags.into(),
+            0xFF42 => self.memory[address as usize],
+            0xFF43 => self.memory[address as usize],
+            0xFF44 => self.memory[address as usize],
+
             0xFF80..=0xFFFE => self.memory[address as usize],
             0xFFFF => self.interupt_enable.into(),
             address => {
@@ -2382,6 +2456,10 @@ impl MemoryBus {
             0xFF07 => self.timer_control = TimerControl::from(byte),
             0xFF0F => self.interupt_flags = InteruptsFlags::from(byte),
             0xFF40 => self.lcd_flags = LCDControlFlags::from(byte),
+            0xFF41 => self.lcd_status_flags = LCDStatusFlags::from(byte),
+            0xFF42 => self.memory[addr as usize] = byte,
+            0xFF43 => self.memory[addr as usize] = byte,
+            // 0xFF44 -> RO
             0xFF80..=0xFFFE => self.memory[addr as usize] = byte,
             0xFFFF => self.interupt_enable = InteruptsFlags::from(byte),
             addr => {
