@@ -130,6 +130,46 @@ impl JoypadFlags {
         }
     }
 }
+pub struct TimerControl {
+    // Enable (1bit), Clock Select (2bits)
+    pub tac: u8,
+}
+
+impl TimerControl {
+    pub fn new() -> Self {
+        Self { tac: 0 }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.tac & 0b0000_0100 != 0
+    }
+
+    pub fn get_clock_select(&self) -> u8 {
+        self.tac & 0b0000_0011
+    }
+
+
+    pub fn read(&self) -> u8 {
+        self.tac
+    }
+
+    pub fn write(&mut self, value: u8) {
+        self.tac = value;
+    }
+}
+
+impl std::convert::From<u8> for TimerControl {
+    fn from(byte: u8) -> Self {
+        Self { tac: byte }
+    }
+}
+
+impl std::convert::From<TimerControl> for u8 {
+    fn from(timer_control: TimerControl) -> Self {
+        timer_control.tac
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct DividerRegister {
     count: u16,
@@ -152,7 +192,6 @@ impl DividerRegister {
         // Increment the count based on the speed mode.
         let speed = if self.double_speed { 32768 } else { 16384 };
         self.count = (self.count + cycles) % speed;
-        println!("Count: {}", self.count);
     }
 
     pub fn read(&self) -> u8 {
@@ -2193,6 +2232,7 @@ pub struct MemoryBus {
     pub interupt_flags: InteruptsFlags,
     pub joypad_flags: JoypadFlags,
     pub divider_register: DividerRegister,
+    pub timer_control: TimerControl,
 }
 
 impl MemoryBus {
@@ -2203,6 +2243,7 @@ impl MemoryBus {
             interupt_flags: InteruptsFlags::new(),
             joypad_flags: JoypadFlags::new(),
             divider_register: DividerRegister::new(),
+            timer_control: TimerControl::new(),
         }
     }
 
@@ -2222,9 +2263,9 @@ impl MemoryBus {
             0xFF01 => todo!("SB: Serial transfer data"),
             0xFF02 => todo!("SC: Serial transfer control"),
             0xFF04 => self.divider_register.read().into(),
-            0xFF05 => todo!("TIMA: Time counter"),
-            0xFF06 => todo!("TMA: Timer Module"),
-            0xFF07 => todo!("TAC: Timer control"),
+            0xFF05 => self.memory[address as usize],
+            0xFF06 => self.memory[address as usize],
+            0xFF07 => self.timer_control.read().into(),
             0xFF0F => self.interupt_flags.into(),
             0xFF80..=0xFFFE => self.memory[address as usize],
             0xFFFF => self.interupt_enable.into(),
@@ -2256,14 +2297,14 @@ impl MemoryBus {
             0xFE00..=0xFEFF => self.memory[addr as usize] = byte,
             0xFF00 => self.write_joypad(byte),
             0xFF04 => self.divider_register = DividerRegister::from(byte),
-            0xFF05 => todo!("TIMA: Time counter"),
-            0xFF06 => todo!("TMA: Timer Module"),
-            0xFF07 => todo!("TAC: Timer control"),
+            0xFF05 => self.memory[addr as usize] = byte,
+            0xFF06 => self.memory[addr as usize] = byte,
+            0xFF07 => self.timer_control = TimerControl::from(byte),
             0xFF0F => self.interupt_flags = InteruptsFlags::from(byte),
             0xFF80..=0xFFFE => self.memory[addr as usize] = byte,
             0xFFFF => self.interupt_enable = InteruptsFlags::from(byte),
             addr => {
-                eprintln!("Address {:#06x?} probably not implemented corrctly", addr);
+                eprintln!("Address {:#06x?} probably not implemented correctly", addr);
                 self.memory[addr as usize] = byte;
             }
         }
@@ -2317,6 +2358,35 @@ impl MemoryBus {
             println!();
         }
     }
+    
+    pub fn update_timer(&mut self, cycles: u16) {
+        if self.timer_control.is_enabled() {
+            let clock_select = self.timer_control.get_clock_select();
+            let clock_fact: u16 = match clock_select {
+                0 => 1024,   // 4.096 KHz
+                1 => 16, // 262.144 KHz
+                2 => 64,  // 65.536 KHz
+                3 => 256,  // 16.384 KHz
+                _ => unreachable!(),
+            };
+            
+            let old_counter = self.read_byte(0xFF05);
+            let new_cycles = cycles * clock_fact;
+            let new_counter = old_counter.wrapping_add(new_cycles as u8);
+
+            if new_cycles > 0xFF || new_cycles + old_counter as u16 > 0xFF{
+                // Reset the timer counter to the value of the timer modulo (0xFF06)
+                self.write_byte(0xFF05, self.read_byte(0xFF06));
+                
+                // Request a timer interrupt
+                self.interupt_enable.timer = true;
+            } else {
+                self.write_byte(0xFF05, new_counter);
+            }
+        }
+    }
+    
+   
 
     pub fn tick(&mut self, cycles: u16) {
         self.divider_register.tick(cycles);
@@ -2419,8 +2489,10 @@ impl CPU {
                 Some(instruction_cycles) => {
                     // Add the number of cycles the instruction took to the cycle counter.
                     self.memory_bus.tick(instruction_cycles as u16);
+                    self.memory_bus.update_timer(instruction_cycles as u16);
 
                     let seconds = instruction_cycles as f32 / cycles_per_second;
+
                     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
                 }
                 None => break,

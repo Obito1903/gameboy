@@ -656,6 +656,35 @@ mod cpu_tests {
         cpu.run(4.194304);
         // inc is 4 cycles
         assert_eq!(cpu.memory_bus.read_byte(0xFF04), 0x04);
+    }
+
+    #[test]
+    fn timer_counter_test() {
+        let mut cpu = CPU::new();
+        cpu.program_counter = 0x0000;
+        // TAC enabled, clock select 01 (262144 Hz)
+        cpu.memory_bus.write_byte(0xFF07, 0x05);
+        cpu.memory_bus.write_byte(0x0000, 0x00);
+        cpu.memory_bus.write_byte(0x0001, 0x10);
         
+        cpu.run(4.194304); 
+        // NOP is 4 cycles, and timer is 16x slower than CPU
+        assert_eq!(cpu.memory_bus.read_byte(0xFF05), 64);
+    }
+
+    #[test]
+    fn timer_counter_overflow() {
+        let mut cpu = CPU::new();
+        cpu.program_counter = 0x0000;
+        // TAC enabled, clock select 01 (262144 Hz)
+        cpu.memory_bus.write_byte(0xFF07, 0x04);
+        cpu.memory_bus.write_byte(0xFF06, 0xF2);
+        cpu.memory_bus.write_byte(0x0050, 0x10);
+        
+        cpu.memory_bus.write_byte(0x0000, 0x00);
+        
+        cpu.run(4.194304); 
+        // NOP is 4 cycles, and timer is 1024x slower than CPU
+        assert_eq!(cpu.memory_bus.read_byte(0xFF05), 0xF2);
     }
 }
