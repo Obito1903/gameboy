@@ -148,7 +148,6 @@ impl TimerControl {
         self.tac & 0b0000_0011
     }
 
-
     pub fn read(&self) -> u8 {
         self.tac
     }
@@ -231,7 +230,6 @@ pub struct LCDControlFlags {
     pub bg_enable: bool,
 }
 
-
 impl LCDControlFlags {
     fn new() -> Self {
         Self {
@@ -298,10 +296,10 @@ impl std::convert::From<u8> for LCDControlFlags {
 }
 #[derive(Debug, Clone, Copy)]
 pub struct LCDStatusFlags {
-    pub lyc_int_select : bool,
-    pub mode_2_int_select : bool,
-    pub mode_1_int_select : bool,
-    pub mode_0_int_select : bool,
+    pub lyc_int_select: bool,
+    pub mode_2_int_select: bool,
+    pub mode_1_int_select: bool,
+    pub mode_0_int_select: bool,
     pub coincidence_flag: bool,
     pub ppu_mode_flag: u8,
 }
@@ -342,7 +340,6 @@ impl LCDStatusFlags {
     fn set_mode(&mut self, mode: u8) {
         self.ppu_mode_flag = mode & 0b0000_0011;
     }
-
 }
 
 impl std::convert::From<LCDStatusFlags> for u8 {
@@ -2378,7 +2375,7 @@ pub struct MemoryBus {
     pub divider_register: DividerRegister,
     pub timer_control: TimerControl,
     pub lcd_flags: LCDControlFlags,
-    pub lcd_status_flags : LCDStatusFlags,
+    pub lcd_status_flags: LCDStatusFlags,
 }
 
 impl MemoryBus {
@@ -2517,26 +2514,26 @@ impl MemoryBus {
             println!();
         }
     }
-    
+
     pub fn update_timer(&mut self, cycles: u16) {
         if self.timer_control.is_enabled() {
             let clock_select = self.timer_control.get_clock_select();
             let clock_fact: u16 = match clock_select {
-                0 => 1024,   // 4.096 KHz
-                1 => 16, // 262.144 KHz
-                2 => 64,  // 65.536 KHz
+                0 => 1024, // 4.096 KHz
+                1 => 16,   // 262.144 KHz
+                2 => 64,   // 65.536 KHz
                 3 => 256,  // 16.384 KHz
                 _ => unreachable!(),
             };
-            
+
             let old_counter = self.read_byte(0xFF05);
             let new_cycles = cycles * clock_fact;
             let new_counter = old_counter.wrapping_add(new_cycles as u8);
 
-            if new_cycles > 0xFF || new_cycles + old_counter as u16 > 0xFF{
+            if new_cycles > 0xFF || new_cycles + old_counter as u16 > 0xFF {
                 // Reset the timer counter to the value of the timer modulo (0xFF06)
                 self.write_byte(0xFF05, self.read_byte(0xFF06));
-                
+
                 // Request a timer interrupt
                 self.interupt_enable.timer = true;
             } else {
@@ -2544,8 +2541,6 @@ impl MemoryBus {
             }
         }
     }
-    
-   
 
     pub fn tick(&mut self, cycles: u16) {
         self.divider_register.tick(cycles);
@@ -2666,6 +2661,35 @@ impl CPU {
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input).unwrap();
             }
+        }
+    }
+
+    pub fn step(&mut self, mhz: f32) {
+        let cycles_per_second = mhz * 1_000_000.0;
+
+        // handle interupts
+        self.handle_interupt();
+        match self.read_instruction() {
+            Some(instruction_cycles) => {
+                // Add the number of cycles the instruction took to the cycle counter.
+                self.memory_bus.tick(instruction_cycles as u16);
+                self.memory_bus.update_timer(instruction_cycles as u16);
+
+                let seconds = instruction_cycles as f32 / cycles_per_second;
+
+                std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+            }
+            None => {}
+        }
+
+        // println!("Cycles: {}", cycles);
+
+        if self.walk {
+            println!("CPU Registers: {:?}", self.registers);
+            println!("CPU Program Counter: {:#06x?}", self.program_counter);
+            println!("CPU Stack Pointer: {:#06x?}", self.stack_pointer);
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap();
         }
     }
 
