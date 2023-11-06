@@ -1,5 +1,25 @@
 use crate::memory::{self, MemoryBus, MemoryBusClient};
 
+pub enum PixelColor {
+    White,
+    LightGray,
+    DarkGray,
+    Black,
+}
+
+pub enum PixelPalette {
+    Palette0,
+    Palette1,
+    Palette2,
+}
+
+pub struct Pixel {
+    color: PixelColor,
+    palette: PixelPalette,
+    priority: u8,
+    bg_priority: bool,
+}
+
 pub struct PPU {
     dot_counter: u16,
 }
