@@ -1,10 +1,10 @@
-use std::{
-    fmt::Display,
-    ops::{Shl, Shr},
-    u8,
-};
+use std::u8;
 
-use crate::{memory::MemoryBus, opcodes::Instruction};
+use crate::{
+    memory::{MemoryBus, MemoryBusClient},
+    opcodes::Instruction,
+    ppu::PPU,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FlagsRegister {
@@ -118,17 +118,17 @@ impl Register {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum JoypadButton {
-    A,
-    B,
-    Select,
-    Start,
-    Right,
-    Left,
-    Up,
-    Down,
-}
+// #[derive(Debug, Clone, Copy)]
+// pub enum JoypadButton {
+//     A,
+//     B,
+//     Select,
+//     Start,
+//     Right,
+//     Left,
+//     Up,
+//     Down,
+// }
 
 pub struct CPU {
     pub registers: Register,
@@ -136,6 +136,7 @@ pub struct CPU {
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
     pub memory_bus: MemoryBus,
+    pub ppu: PPU,
     pub debug: bool,
     pub walk: bool,
     pub is_halted: bool,
@@ -149,6 +150,7 @@ impl CPU {
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
             memory_bus: MemoryBus::new(),
+            ppu: PPU::new(),
             debug: false,
             walk: false,
             is_halted: false,
@@ -226,6 +228,8 @@ impl CPU {
                 Some(cycles) => {
                     let seconds = cycles as f32 / cycles_per_second;
                     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+                    self.ppu.run_for(&mut self.memory_bus, cycles);
+                    self.memory_bus.client = MemoryBusClient::CPU;
                 }
                 None => break,
             }
