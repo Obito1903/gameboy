@@ -1,4 +1,4 @@
-use crate::cpu::CPU;
+use crate::{bus::Memory, cpu::CPU};
 
 #[derive(Debug, Clone, Copy)]
 pub enum RegisterName {
@@ -847,7 +847,7 @@ impl Instruction {
             0xFE => Self::CP(OperandTypes::D8(cpu.memory_bus.read_byte(pc + 1))),
             0xFF => Self::RST(OperandTypes::D8(0x38)),
             0xCB => {
-                let next_byte = cpu.memory_bus.read_next_byte(pc);
+                let next_byte = cpu.memory_bus.read_byte(pc + 1);
                 match next_byte {
                     0x00 => Self::RLC(OperandTypes::Register(RegisterName::B)),
                     0x01 => Self::RLC(OperandTypes::Register(RegisterName::C)),

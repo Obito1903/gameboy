@@ -1,5 +1,6 @@
 use super::Memory;
 
+#[derive(Default, Debug, Clone, Copy)]
 pub struct AudioRegisters {
     pub nr52: u8,
     pub nr51: u8,
@@ -80,6 +81,7 @@ impl Memory for AudioRegisters {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy)]
 pub struct WavePattern {
     pub wave_pattern: [u8; 0x10],
 }

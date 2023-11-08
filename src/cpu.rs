@@ -1,7 +1,8 @@
 use std::u8;
 
 use crate::{
-    memory::{MemoryBus, MemoryBusClient},
+    bus::{Bus, Memory, MemoryLockOwner},
+    // memory::{MemoryBus, MemoryBusClient},
     opcodes::Instruction,
     ppu::PPU,
 };
@@ -135,7 +136,7 @@ pub struct CPU {
     pub program_counter: u16,
     pub stack_pointer: u16,
     pub interupt_master_enable: bool,
-    pub memory_bus: MemoryBus,
+    pub memory_bus: Bus,
     pub ppu: PPU,
     pub debug: bool,
     pub walk: bool,
@@ -149,7 +150,7 @@ impl CPU {
             program_counter: 0,
             stack_pointer: 0xFFFF,
             interupt_master_enable: false,
-            memory_bus: MemoryBus::new(),
+            memory_bus: Bus::default(),
             ppu: PPU::new(),
             debug: false,
             walk: false,
@@ -229,7 +230,7 @@ impl CPU {
                     let seconds = cycles as f32 / cycles_per_second;
                     std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
                     self.ppu.run_for(&mut self.memory_bus, cycles);
-                    self.memory_bus.client = MemoryBusClient::CPU;
+                    self.memory_bus.current_owner = MemoryLockOwner::CPU;
                 }
                 None => break,
             }

@@ -1,4 +1,4 @@
-use crate::memory::{self, MemoryBus, MemoryBusClient};
+use crate::bus::{Bus, MemoryLockOwner, MemoryRegion};
 
 pub enum PixelColor {
     White,
@@ -30,79 +30,78 @@ impl PPU {
     }
 
     #[inline]
-    fn update_lyc(memory: &mut MemoryBus) {
+    fn update_lyc(memory: &mut Bus) {
         // Update LYC == LY
-        if memory.read_byte(0xFF44) == memory.read_byte(0xFF45) {
-            memory.stat_flags.lyc_eq_ly = true;
+        if memory.io.lcd.status.lyc == memory.io.lcd.status.ly {
+            memory.io.lcd.status.stat.lyc_ly = true;
         } else {
-            memory.stat_flags.lyc_eq_ly = false;
+            memory.io.lcd.status.stat.lyc_ly = false;
         }
     }
 
-    fn update_stat_interupt(memory: &mut MemoryBus) {
-        if memory.stat_flags.lyc_eq_ly && memory.stat_flags.lyc_selected {
+    fn update_stat_interupt(memory: &mut Bus) {
+        if memory.io.lcd.status.stat.lyc_ly && memory.io.lcd.status.stat.lyc_interupt {
             memory.interupt_flags.lcd_stat = true;
         }
     }
 
-    fn switch_to_mode0(memory: &mut MemoryBus) {
+    fn switch_to_mode0(memory: &mut Bus) {
         // Unlock VRAM
-        memory.unlock_region(0x8000, 0x9FFF);
+        memory.unlock(MemoryRegion::VRAM);
         // Unlock OAM
-        memory.unlock_region(0xFE00, 0xFE9F);
-        memory.stat_flags.ppu_mode = 0;
+        memory.unlock(MemoryRegion::OAM);
+        memory.io.lcd.status.stat.ppu_mode = 0;
     }
 
-    pub fn mode0(&mut self, memory: &mut MemoryBus) {
-        memory.stat_flags.ppu_mode = 0;
+    pub fn mode0(&mut self, memory: &mut Bus) {
+        memory.io.lcd.status.stat.ppu_mode = 0;
     }
 
-    fn switch_to_mode1(memory: &mut MemoryBus) {
-        memory.stat_flags.ppu_mode = 1;
+    fn switch_to_mode1(memory: &mut Bus) {
+        memory.io.lcd.status.stat.ppu_mode = 1;
     }
 
-    pub fn mode1(&mut self, memory: &mut MemoryBus) {
+    pub fn mode1(&mut self, memory: &mut Bus) {
         memory.interupt_flags.v_blank = true;
     }
 
-    fn switch_to_mode2(memory: &mut MemoryBus) {
+    fn switch_to_mode2(memory: &mut Bus) {
         // Lock OAM
-        memory.lock_region(0xFE00, 0xFE9F);
-        memory.stat_flags.ppu_mode = 2;
+        memory.lock(MemoryRegion::OAM);
+        memory.io.lcd.status.stat.ppu_mode = 2;
     }
 
-    pub fn mode2(&mut self, memory: &mut MemoryBus) {
+    pub fn mode2(&mut self, memory: &mut Bus) {
         if self.dot_counter == 80 {
             Self::switch_to_mode3(memory);
         }
     }
 
-    fn switch_to_mode3(memory: &mut MemoryBus) {
+    fn switch_to_mode3(memory: &mut Bus) {
         // Lock VRAM
-        memory.lock_region(0x8000, 0x9FFF);
-        memory.stat_flags.ppu_mode = 3;
+        memory.lock(MemoryRegion::VRAM);
+        memory.io.lcd.status.stat.ppu_mode = 3;
     }
 
-    pub fn mode3(&mut self, memory: &mut MemoryBus) {
+    pub fn mode3(&mut self, memory: &mut Bus) {
         if self.dot_counter == 252 {
             Self::switch_to_mode0(memory);
         }
     }
 
-    pub fn step(&mut self, memory: &mut MemoryBus) {
+    pub fn step(&mut self, memory: &mut Bus) {
         Self::update_lyc(memory);
         Self::update_stat_interupt(memory);
 
-        let ly = memory.read_byte(0xFF44);
-        if ly == 144 {
+        if memory.io.lcd.status.ly == 144 {
             Self::switch_to_mode1(memory);
         }
-        if ly == 153 {
-            memory.write_byte(0xFF44, 0);
+        if memory.io.lcd.status.ly == 153 {
+            memory.io.lcd.status.ly = 0;
             Self::switch_to_mode2(memory);
         }
 
-        match memory.stat_flags.ppu_mode {
+        match memory.io.lcd.status.stat.ppu_mode {
             0 => self.mode0(memory),
             1 => self.mode1(memory),
             2 => self.mode2(memory),
@@ -114,12 +113,12 @@ impl PPU {
         self.dot_counter += 1;
         if self.dot_counter == 456 {
             self.dot_counter = 0;
-            memory.write_byte(0xFF44, ly + 1);
+            memory.io.lcd.status.ly += 1;
         }
     }
 
-    pub fn run_for(&mut self, memory: &mut MemoryBus, cycles: u8) {
-        memory.client = MemoryBusClient::PPU;
+    pub fn run_for(&mut self, memory: &mut Bus, cycles: u8) {
+        memory.current_owner = MemoryLockOwner::PPU;
         for _ in 0..cycles {
             self.step(memory);
         }

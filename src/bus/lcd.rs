@@ -36,6 +36,7 @@ pub enum SpriteSize {
     Size8x16 = 1,
 }
 
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LCDControl {
     pub lcd_enable: bool,
     pub window_tile_map_area: WindowTileMapArea,
@@ -198,13 +199,50 @@ pub struct LCDPosScroll {
     pub wx: u8,
 }
 
+impl Memory for LCDPosScroll {
+    fn read_byte(&self, address: u16) -> u8 {
+        match address {
+            0xFF42 => self.scy,
+            0xFF43 => self.scx,
+            0xFF4A => self.wy,
+            0xFF4B => self.wx,
+            _ => panic!("Invalid read from LCDPosScroll address: {:04X}", address),
+        }
+    }
+
+    fn write_byte(&mut self, address: u16, value: u8) {
+        match address {
+            0xFF42 => self.scy = value,
+            0xFF43 => self.scx = value,
+            0xFF4A => self.wy = value,
+            0xFF4B => self.wx = value,
+            _ => panic!("Invalid write to LCDPosScroll address: {:04X}", address),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
 pub enum Color {
+    #[default]
     White = 0,
     LightGray = 1,
     DarkGray = 2,
     Black = 3,
 }
 
+impl std::convert::From<u8> for Color {
+    fn from(value: u8) -> Self {
+        match value {
+            0b00 => Color::White,
+            0b01 => Color::LightGray,
+            0b10 => Color::DarkGray,
+            0b11 => Color::Black,
+            _ => panic!("Invalid color value: {:02X}", value),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
 pub struct ColorPalette {
     pub color3: Color,
     pub color2: Color,
@@ -212,6 +250,29 @@ pub struct ColorPalette {
     pub color0: Color,
 }
 
+impl std::convert::From<ColorPalette> for u8 {
+    fn from(value: ColorPalette) -> Self {
+        let mut result = 0;
+        result |= value.color3 as u8;
+        result |= (value.color2 as u8) << 2;
+        result |= (value.color1 as u8) << 4;
+        result |= (value.color0 as u8) << 6;
+        result
+    }
+}
+
+impl std::convert::From<u8> for ColorPalette {
+    fn from(value: u8) -> Self {
+        ColorPalette {
+            color3: (value & 0b0000_0011).into(),
+            color2: ((value & 0b0000_1100) >> 2).into(),
+            color1: ((value & 0b0011_0000) >> 4).into(),
+            color0: ((value & 0b1100_0000) >> 6).into(),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LCDPalettes {
     pub bgp: ColorPalette,
     pub obp0: ColorPalette,
@@ -219,6 +280,27 @@ pub struct LCDPalettes {
     // TODO: CGB palettes
 }
 
+impl Memory for LCDPalettes {
+    fn read_byte(&self, address: u16) -> u8 {
+        match address {
+            0xFF47 => self.bgp.into(),
+            0xFF48 => self.obp0.into(),
+            0xFF49 => self.obp1.into(),
+            _ => panic!("Invalid read from LCDPalettes address: {:04X}", address),
+        }
+    }
+
+    fn write_byte(&mut self, address: u16, value: u8) {
+        match address {
+            0xFF47 => self.bgp = value.into(),
+            0xFF48 => self.obp0 = value.into(),
+            0xFF49 => self.obp1 = value.into(),
+            _ => panic!("Invalid write to LCDPalettes address: {:04X}", address),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LCDRegisters {
     pub control: LCDControl,
     pub status: LCDStatus,
@@ -230,7 +312,7 @@ impl Memory for LCDRegisters {
     fn read_byte(&self, address: u16) -> u8 {
         match address {
             0xFF40 => self.control.into(),
-            0xFF41 => self.status.into(),
+            0xFF41 => self.status.read_byte(address),
             0xFF42 => self.pos_scroll.scy,
             0xFF43 => self.pos_scroll.scx,
             0xFF44 => self.status.ly,
@@ -247,7 +329,7 @@ impl Memory for LCDRegisters {
     fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             0xFF40 => self.control = value.into(),
-            0xFF41 => self.status = value.into(),
+            0xFF41 => self.status.write_byte(address, value),
             0xFF42 => self.pos_scroll.scy = value,
             0xFF43 => self.pos_scroll.scx = value,
             0xFF44 => self.status.ly = value,
