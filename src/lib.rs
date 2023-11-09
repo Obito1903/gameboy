@@ -4,4 +4,3 @@ mod cpu_test;
 // pub mod memory;
 pub mod opcodes;
 pub mod ppu;
-mod ui;
