@@ -1,3 +1,6 @@
+use pixels::{Pixels, SurfaceTexture};
+use winit::{dpi::LogicalSize, event_loop::EventLoop, window::WindowBuilder};
+
 use crate::bus::{Bus, MemoryLockOwner, MemoryRegion};
 
 pub enum PixelColor {
@@ -22,11 +25,41 @@ pub struct Pixel {
 
 pub struct PPU {
     dot_counter: u16,
+    event_loop: EventLoop<()>,
+    window: winit::window::Window,
+    pixels: Pixels,
 }
+
+const WIDTH: u32 = 160;
+const HEIGHT: u32 = 144;
 
 impl PPU {
     pub fn new() -> Self {
-        Self { dot_counter: 0 }
+        let event_loop = EventLoop::new();
+        let window = {
+            let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
+            WindowBuilder::new()
+                .with_title("Hello Pixels")
+                .with_inner_size(size)
+                .with_min_inner_size(size)
+                .with_resizable(false)
+                .build(&event_loop)
+                .unwrap()
+        };
+
+        let pixels = {
+            let window_size = window.inner_size();
+            let surface_texture =
+                SurfaceTexture::new(window_size.width, window_size.height, &window);
+            Pixels::new(WIDTH, HEIGHT, surface_texture).unwrap()
+        };
+
+        Self {
+            dot_counter: 0,
+            event_loop,
+            window,
+            pixels,
+        }
     }
 
     #[inline]
@@ -65,7 +98,12 @@ impl PPU {
         memory.interupt_flags.v_blank = true;
     }
 
-    fn switch_to_mode2(memory: &mut Bus) {
+    fn switch_to_mode2(&self, memory: &mut Bus) {
+        // push rendered pixels to screen
+        if let Err(err) = self.pixels.render() {
+            panic!("pixels.render failed: {}", err);
+        }
+        self.window.request_redraw();
         // Lock OAM
         memory.lock(MemoryRegion::OAM);
         memory.io.lcd.status.stat.ppu_mode = 2;
@@ -84,6 +122,15 @@ impl PPU {
     }
 
     pub fn mode3(&mut self, memory: &mut Bus) {
+        let frame = self.pixels.frame_mut();
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            // let x = (i % WIDTH as usize) as i16;
+            // let y = (i / WIDTH as usize) as i16;
+
+            let rgba = [0x5e, 0x48, 0xe8, 0xff];
+
+            pixel.copy_from_slice(&rgba);
+        }
         if self.dot_counter == 252 {
             Self::switch_to_mode0(memory);
         }
@@ -98,7 +145,7 @@ impl PPU {
         }
         if memory.io.lcd.status.ly == 153 {
             memory.io.lcd.status.ly = 0;
-            Self::switch_to_mode2(memory);
+            self.switch_to_mode2(memory);
         }
 
         match memory.io.lcd.status.stat.ppu_mode {

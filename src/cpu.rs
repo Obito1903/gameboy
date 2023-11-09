@@ -220,15 +220,15 @@ impl CPU {
     }
 
     pub fn run(&mut self, mhz: f32) {
-        let cycles_per_second = mhz * 1_000_000.0;
+        // let cycles_per_second = mhz * 1_000_000.0;
 
         loop {
             // handle interupts
             self.handle_interupt();
             match self.read_instruction() {
                 Some(cycles) => {
-                    let seconds = cycles as f32 / cycles_per_second;
-                    std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+                    // let seconds = cycles as f32 / cycles_per_second;
+                    // std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
                     self.ppu.run_for(&mut self.memory_bus, cycles);
                     self.memory_bus.current_owner = MemoryLockOwner::CPU;
                 }

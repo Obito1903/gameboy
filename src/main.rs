@@ -31,7 +31,7 @@ pub fn print_section_hex(data: Vec<u8>, start: u16, end: u16) {
     }
 }
 
-fn main() {
+fn run_gb() {
     let args = Args::parse();
     let mut cpu = CPU::new();
 
@@ -47,5 +47,9 @@ fn main() {
         cpu.walk = true;
     }
     cpu.run(args.cpu_speed);
+}
+
+fn main() {
+    run_gb();
     println!("Hello, world!");
 }
