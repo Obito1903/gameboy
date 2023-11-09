@@ -1,15 +1,15 @@
-use crate::{cpu::CPU, lcd_screen::LCDScreen};
+use crate::{cpu::CPU, ppu::PPU};
 use std::fs;
 pub struct Gameboy {
     pub cpu: CPU,
-    pub lcd_screen: LCDScreen,
+    pub ppu: PPU,
 }
 
 impl Gameboy {
     pub fn new() -> Self {
         Self {
             cpu: CPU::new(),
-            lcd_screen: LCDScreen::new(),
+            ppu: PPU::new(),
         }
     }
 
@@ -38,8 +38,8 @@ impl Gameboy {
 
         while !rl.window_should_close() {
             self.cpu.step(cpu_speed);
-            self.lcd_screen.update(&self.cpu.memory_bus);
-            self.lcd_screen.draw(&mut rl, &thread);
+            self.ppu.update(&self.cpu.memory_bus);
+            self.ppu.draw(&mut rl, &thread);
         }
     }
 }

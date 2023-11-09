@@ -223,7 +223,7 @@ pub struct LCDControlFlags {
     pub lcd_enable: bool,
     pub window_tile_map: bool,
     pub window_enable: bool,
-    pub bg_window_tile_data: bool,
+    pub bg_window_tile_data_area: bool,
     pub bg_tile_map: bool,
     pub sprite_size: bool,
     pub sprite_enable: bool,
@@ -236,7 +236,7 @@ impl LCDControlFlags {
             lcd_enable: false,
             window_tile_map: false,
             window_enable: false,
-            bg_window_tile_data: false,
+            bg_window_tile_data_area: false,
             bg_tile_map: false,
             sprite_size: false,
             sprite_enable: false,
@@ -255,7 +255,7 @@ impl LCDControlFlags {
         if self.window_enable {
             result |= 0b0010_0000;
         }
-        if self.bg_window_tile_data {
+        if self.bg_window_tile_data_area {
             result |= 0b0001_0000;
         }
         if self.bg_tile_map {
@@ -286,7 +286,7 @@ impl std::convert::From<u8> for LCDControlFlags {
             lcd_enable: (value & 0b1000_0000) != 0,
             window_tile_map: (value & 0b0100_0000) != 0,
             window_enable: (value & 0b0010_0000) != 0,
-            bg_window_tile_data: (value & 0b0001_0000) != 0,
+            bg_window_tile_data_area: (value & 0b0001_0000) != 0,
             bg_tile_map: (value & 0b0000_1000) != 0,
             sprite_size: (value & 0b0000_0100) != 0,
             sprite_enable: (value & 0b0000_0010) != 0,

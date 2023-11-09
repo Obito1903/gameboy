@@ -1,7 +1,7 @@
 use std::fs;
 
 use clap::Parser;
-use gb::{self, cpu::CPU, gameboy::Gameboy, lcd_screen::LCDScreen};
+use gb::{self, cpu::CPU, gameboy::Gameboy, ppu::PPU};
 use raylib::prelude::*;
 
 #[derive(Parser, Debug)]
