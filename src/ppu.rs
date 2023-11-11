@@ -23,11 +23,38 @@ pub struct Pixel {
     bg_priority: bool,
 }
 
+pub enum DMGPaletteSelect {
+    OBP0,
+    OBP1,
+}
+
+struct ObjectAttribute {
+    y: u8,
+    x: u8,
+    index: u8,
+    priority: bool,
+    y_flip: bool,
+    x_flip: bool,
+    palette: DMGPaletteSelect,
+    // CGB only
+    // bank: bool,
+    // cgb_palette: u8,
+}
+
+struct Object {
+    attributes: ObjectAttribute,
+    pixels: [Pixel; 64],
+}
+
 pub struct PPU {
     dot_counter: u16,
     event_loop: EventLoop<()>,
     window: winit::window::Window,
     pixels: Pixels,
+
+    selected_objects: Vec<Object>,
+    fifo_background: Vec<Pixel>,
+    fifo_object: Vec<Pixel>,
 }
 
 const WIDTH: u32 = 160;
@@ -59,6 +86,9 @@ impl PPU {
             event_loop,
             window,
             pixels,
+            selected_objects: Vec::with_capacity(10),
+            fifo_background: Vec::with_capacity(16),
+            fifo_object: Vec::with_capacity(16),
         }
     }
 
@@ -104,6 +134,11 @@ impl PPU {
             panic!("pixels.render failed: {}", err);
         }
         self.window.request_redraw();
+        // Scan OAM
+        // for oam in memory.oam. {
+
+        // }
+
         // Lock OAM
         memory.lock(MemoryRegion::OAM);
         memory.io.lcd.status.stat.ppu_mode = 2;
@@ -167,6 +202,10 @@ impl PPU {
     pub fn run_for(&mut self, memory: &mut Bus, cycles: u8) {
         memory.current_owner = MemoryLockOwner::PPU;
         for _ in 0..cycles {
+            // Advance dot counter by 4 (4 dot per cycle in single speed mode)
+            self.step(memory);
+            self.step(memory);
+            self.step(memory);
             self.step(memory);
         }
     }

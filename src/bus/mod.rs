@@ -9,6 +9,7 @@ use self::{
 pub mod audio;
 pub mod joypad;
 pub mod lcd;
+pub mod oam;
 pub mod serial;
 pub mod time_divider;
 
