@@ -743,7 +743,7 @@ impl Instruction {
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
             ),
-            0xC3 => Self::JP(None, OperandTypes::D16(cpu.memory_bus.read_word(pc + 1))),
+            0xC3 => Self::JP(None, OperandTypes::A16(cpu.memory_bus.read_word(pc + 1))),
             0xC4 => Self::CALL(
                 Some(FlagOperand::NZ),
                 OperandTypes::D16(cpu.memory_bus.read_word(pc + 1)),
@@ -1434,9 +1434,15 @@ impl Instruction {
             TargetSize::Bit(_) => panic!("Cannot DEC bit"),
             target => panic!("Cannot DEC {:?} to byte", target),
         };
-        cpu.registers.f.zero = zero;
-        cpu.registers.f.subtract = true;
-        cpu.registers.f.carry = overflow;
+        match target {
+            OperandTypes::RegisterPair(_) => (),
+            _ => {
+                cpu.registers.f.zero = zero;
+                cpu.registers.f.subtract = true;
+                cpu.registers.f.carry = overflow;
+            }
+        }
+
         cycle
     }
 
@@ -1504,7 +1510,29 @@ impl Instruction {
 
     #[inline]
     fn jp(cpu: &mut CPU, condition: Option<FlagOperand>, address: OperandTypes) -> u8 {
-        todo!("JP not implemented")
+        match condition {
+            Some(c) => {
+                if c.get(cpu) {
+                    cpu.program_counter = match address {
+                        OperandTypes::D16(address) => address,
+                        OperandTypes::A16(address) => address,
+                        _ => panic!("JP only available for 16 bits addresses"),
+                    };
+                    16
+                } else {
+                    12
+                }
+            }
+            None => {
+                cpu.program_counter = match address {
+                    OperandTypes::RegisterPair(address) => address.get(cpu),
+                    OperandTypes::A16(address) => address,
+                    _ => panic!("JP only available for 16 bits addresses: {:?}", address),
+                };
+                16
+            }
+        }
+        // todo!("JP not implemented")
     }
 
     #[inline]
@@ -1531,6 +1559,7 @@ impl Instruction {
                         16
                     }
                 }
+                OperandTypes::D8(_) => 12,
                 source => panic!("Cannot LD to memory from {:?}", source),
             },
             target => panic!("LD not implemented for this target {:?}", target),
@@ -1758,7 +1787,13 @@ impl Instruction {
 
     #[inline]
     fn rst(cpu: &mut CPU, address: OperandTypes) -> u8 {
-        todo!("RST not implemented")
+        let address = match address {
+            OperandTypes::D8(address) => address,
+            _ => panic!("RST only available for 8 bits addresses"),
+        };
+        cpu.push_word(cpu.program_counter);
+        cpu.program_counter = 0x0000 + address as u16;
+        16
     }
 
     #[inline]

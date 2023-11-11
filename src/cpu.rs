@@ -148,7 +148,7 @@ impl CPU {
         Self {
             registers: Register::new(),
             program_counter: 0,
-            stack_pointer: 0xFFFF,
+            stack_pointer: 0xFFFE,
             interupt_master_enable: false,
             memory_bus: Bus::default(),
             ppu: PPU::new(),
@@ -168,7 +168,7 @@ impl CPU {
         let instruction = Instruction::from_byte(self, self.program_counter);
         if self.debug {
             println!(
-                "PC: {:0004?} OP: {:#02x?} I: {:?}",
+                "PC: {:0004x?} OP: {:#02x?} I: {:?}",
                 self.program_counter,
                 self.memory_bus.read_byte(self.program_counter),
                 instruction
@@ -219,16 +219,26 @@ impl CPU {
         }
     }
 
-    pub fn run(&mut self, mhz: f32) {
-        // let cycles_per_second = mhz * 1_000_000.0;
+    pub fn run(&mut self, hz: u64) {
+        let cycles_per_second = hz;
 
         loop {
             // handle interupts
             self.handle_interupt();
+            self.memory_bus
+                .io
+                .timer_divider
+                .tick(&mut self.memory_bus.interupt_flags, cycles_per_second);
+            self.memory_bus
+                .io
+                .lcd
+                .status
+                .tick(&mut self.memory_bus.interupt_flags);
             match self.read_instruction() {
                 Some(cycles) => {
                     // let seconds = cycles as f32 / cycles_per_second;
                     // std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
+                    self.memory_bus.oam.dma_transfer_step();
                     self.ppu.run_for(&mut self.memory_bus, cycles);
                     self.memory_bus.current_owner = MemoryLockOwner::CPU;
                 }

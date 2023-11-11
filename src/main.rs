@@ -18,8 +18,8 @@ struct Args {
     #[arg(short, long)]
     walk: bool,
 
-    #[arg(short, long, default_value = "4.194304")]
-    cpu_speed: f32,
+    #[arg(short, long, default_value = "4194304")]
+    cpu_speed: u64,
 }
 
 pub fn print_section_hex(data: Vec<u8>, start: u16, end: u16) {
@@ -39,7 +39,8 @@ fn run_gb() {
     let boot_rom = fs::read(args.boot_rom).unwrap();
     cpu.memory_bus.load_boot_rom(&boot_rom);
     // print_section_hex(cpu.memory_bus.rom, 0x00, 0x100);
-
+    let rom = fs::read(args.rom).unwrap();
+    cpu.memory_bus.load_rom(&rom);
     if args.debug {
         cpu.debug = true;
     }

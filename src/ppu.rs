@@ -175,7 +175,7 @@ impl PPU {
         Self::update_lyc(memory);
         Self::update_stat_interupt(memory);
 
-        if memory.io.lcd.status.ly == 144 {
+        if memory.io.lcd.status.ly == 144 && self.dot_counter == 0 {
             Self::switch_to_mode1(memory);
         }
         if memory.io.lcd.status.ly == 153 {

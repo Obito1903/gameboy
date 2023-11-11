@@ -36,7 +36,7 @@ pub enum SpriteSize {
     Size8x16 = 1,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LCDControl {
     pub lcd_enable: bool,
     pub window_tile_map_area: WindowTileMapArea,
@@ -46,6 +46,21 @@ pub struct LCDControl {
     pub obj_size: SpriteSize,
     pub obj_enable: bool,
     pub bg_window_enable_priority: bool,
+}
+
+impl Default for LCDControl {
+    fn default() -> Self {
+        Self {
+            lcd_enable: true,
+            window_tile_map_area: WindowTileMapArea::Area0,
+            window_enable: false,
+            bg_window_tile_data_area: BGWindowTileDataArea::Area0,
+            bg_tile_map_area: BGTileMapArea::Area0,
+            obj_size: SpriteSize::Size8x8,
+            obj_enable: false,
+            bg_window_enable_priority: false,
+        }
+    }
 }
 
 impl std::convert::From<LCDControl> for u8 {

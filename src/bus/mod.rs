@@ -2,6 +2,7 @@ use self::{
     audio::{AudioRegisters, WavePattern},
     joypad::JoypadRegister,
     lcd::LCDRegisters,
+    oam::Oam,
     serial::SerialRegister,
     time_divider::TimeDividerRegister,
 };
@@ -80,7 +81,8 @@ impl Memory for IORegisters {
             0xFF04..=0xFF07 => self.timer_divider.read_byte(address),
             0xFF10..=0xFF26 => self.audio.read_byte(address),
             0xFF30..=0xFF3F => self.wave_pattern.read_byte(address),
-            0xFF40..=0xFF4B => self.lcd.read_byte(address),
+            0xFF40..=0xFF45 => self.lcd.read_byte(address),
+            0xFF47..=0xFF4B => self.lcd.read_byte(address),
             0xFF4F => self.vram_bank,
             0xFF50 => self.disable_boot_rom,
             0xFF51..=0xFF55 => 0,
@@ -113,16 +115,17 @@ pub struct Bus {
     pub memory_lock: MemoryLock,
     pub current_owner: MemoryLockOwner,
 
-    pub rom: [u8; 0x3FFF],
-    pub banked_rom: Vec<[u8; 0x3FFF]>,
-    pub vram: ([u8; 0x1FFF], [u8; 0x1FFF]),
-    pub external_ram: Vec<[u8; 0x1FFF]>,
-    pub wram: [u8; 0x0FFF],
-    pub external_wram: [[u8; 0x0FFF]; 7],
-    pub oam: [u8; 0x009F],
+    pub boot_rom: [u8; 0x100],
+    pub rom: [u8; 0x4000],
+    pub banked_rom: Vec<[u8; 0x4000]>,
+    pub vram: ([u8; 0x2000], [u8; 0x2000]),
+    pub external_ram: Vec<[u8; 0x2000]>,
+    pub wram: [u8; 0x1000],
+    pub external_wram: [[u8; 0x1000]; 7],
+    pub oam: Oam,
     pub interupt_flags: InteruptFlags,
     pub io: IORegisters,
-    pub hram: [u8; 0x007F],
+    pub hram: [u8; 0x0080],
     pub interupt_enable: InteruptFlags,
 }
 
@@ -132,16 +135,17 @@ impl Default for Bus {
             memory_lock: MemoryLock::default(),
             current_owner: MemoryLockOwner::CPU,
 
-            rom: [0; 0x3FFF],
-            banked_rom: vec![[0; 0x3FFF]],
-            vram: ([0; 0x1FFF], [0; 0x1FFF]),
-            external_ram: vec![[0; 0x1FFF]],
-            wram: [0; 0x0FFF],
-            external_wram: [[0; 0x0FFF]; 7],
-            oam: [0; 0x009F],
+            boot_rom: [0; 0x100],
+            rom: [0; 0x4000],
+            banked_rom: vec![[0; 0x4000]],
+            vram: ([0; 0x2000], [0; 0x2000]),
+            external_ram: vec![[0; 0x2000]],
+            wram: [0; 0x1000],
+            external_wram: [[0; 0x1000]; 7],
+            oam: Oam::default(),
             interupt_flags: InteruptFlags::default(),
             io: IORegisters::default(),
-            hram: [0; 0x007F],
+            hram: [0; 0x0080],
             interupt_enable: InteruptFlags::default(),
         }
     }
@@ -206,11 +210,23 @@ impl Bus {
     }
 
     pub fn load_boot_rom(&mut self, boot_rom: &[u8]) {
-        self.rom[..boot_rom.len()].copy_from_slice(boot_rom);
+        self.boot_rom[..boot_rom.len()].copy_from_slice(boot_rom);
     }
 
     pub fn load_rom(&mut self, rom: &[u8]) {
-        self.rom[0x0100..(rom.len() + 0x0100)].copy_from_slice(rom);
+        for (i, byte) in rom.iter().enumerate() {
+            match i {
+                0..=0x3FFF => self.rom[i] = *byte,
+                _ => {
+                    let bank = i / 0x4000;
+                    let offset = i % 0x4000;
+                    if self.banked_rom.len() <= bank {
+                        self.banked_rom.push([0; 0x4000]);
+                    }
+                    self.banked_rom[bank][offset] = *byte;
+                }
+            }
+        }
     }
 }
 
@@ -220,18 +236,27 @@ impl Memory for Bus {
             return 0xFF;
         }
         match address {
-            0x0000..=0x3FFF => self.rom[address as usize],
+            0x0000..=0x00FF => {
+                if self.io.disable_boot_rom == 0 {
+                    self.boot_rom[address as usize]
+                } else {
+                    self.rom[address as usize]
+                }
+            }
+            0x0100..=0x3FFF => self.rom[address as usize],
             0x4000..=0x7FFF => self.banked_rom[0][address as usize - 0x4000],
             0x8000..=0x9FFF => self.vram.0[address as usize - 0x8000],
             0xA000..=0xBFFF => self.external_ram[0][address as usize - 0xA000],
             0xC000..=0xCFFF => self.wram[address as usize - 0xC000],
             0xD000..=0xDFFF => self.external_wram[0][address as usize - 0xD000],
-            0xE000..=0xFDFF => self.wram[address as usize - 0xE000],
-            0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00],
+            0xE000..=0xFDFF => self.read_byte(address - 0x2000),
+            0xFE00..=0xFE9F => self.read_byte(address),
             0xFEA0..=0xFEFF => 0,
             0xFF00..=0xFF0E => self.io.read_byte(address),
             0xFF0F => self.interupt_flags.into(),
-            0xFF10..=0xFF7F => self.io.read_byte(address),
+            0xFF10..=0xFF45 => self.io.read_byte(address),
+            0xFF46 => self.oam.read_byte(address),
+            0xFF47..=0xFF7F => self.io.read_byte(address),
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80],
             0xFFFF => self.interupt_enable.into(),
         }
@@ -243,17 +268,20 @@ impl Memory for Bus {
         }
 
         match address {
-            0x0000..=0x7FFF => panic!("Cannot write to ROM"),
+            0x0000..=0x3FFF => self.rom[address as usize] = value,
+            0x4000..=0x7FFF => self.banked_rom[0][address as usize - 0x4000] = value,
             0x8000..=0x9FFF => self.vram.0[address as usize - 0x8000] = value,
             0xA000..=0xBFFF => self.external_ram[0][address as usize - 0xA000] = value,
             0xC000..=0xCFFF => self.wram[address as usize - 0xC000] = value,
             0xD000..=0xDFFF => self.external_wram[0][address as usize - 0xD000] = value,
-            0xE000..=0xFDFF => self.wram[address as usize - 0xE000] = value,
-            0xFE00..=0xFE9F => self.oam[address as usize - 0xFE00] = value,
+            0xE000..=0xFDFF => self.write_byte(address - 0x2000, value),
+            0xFE00..=0xFE9F => self.oam.write_byte(address, value),
             0xFEA0..=0xFEFF => (),
             0xFF00..=0xFF0E => self.io.write_byte(address, value),
             0xFF0F => self.interupt_flags = value.into(),
-            0xFF10..=0xFF7F => self.io.write_byte(address, value),
+            0xFF10..=0xFF45 => self.io.write_byte(address, value),
+            0xFF46 => self.oam.write_byte(address, value),
+            0xFF47..=0xFF7F => self.io.write_byte(address, value),
             0xFF80..=0xFFFE => self.hram[address as usize - 0xFF80] = value,
             0xFFFF => self.interupt_enable = value.into(),
         }
