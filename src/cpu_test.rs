@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod cpu_tests {
-    use crate::cpu::CPU;
+    use crate::{bus::Memory, cpu::CPU};
 
     #[test]
     fn add_c() {
@@ -533,7 +533,7 @@ mod cpu_tests {
         );
         assert_eq!(cpu.program_counter, 0x0003);
     }
-  
+
     #[test]
     fn xor_c() {
         let mut cpu = CPU::new();
@@ -547,7 +547,7 @@ mod cpu_tests {
         assert_eq!(cpu.registers.a, 0b0000_0001);
         assert_eq!(cpu.program_counter, 0x0002);
     }
-  
+
     #[test]
     fn or_c() {
         let mut cpu = CPU::new();
@@ -561,7 +561,7 @@ mod cpu_tests {
         assert_eq!(cpu.registers.a, 0b0000_0011);
         assert_eq!(cpu.program_counter, 0x0002);
     }
-  
+
     #[test]
     fn swap() {
         let mut cpu = CPU::new();
@@ -576,7 +576,7 @@ mod cpu_tests {
         assert_eq!(cpu.registers.b, 0b0001_0000);
         assert_eq!(cpu.program_counter, 0x0003);
     }
-      
+
     #[test]
     fn sbc() {
         let mut cpu = CPU::new();
@@ -628,15 +628,14 @@ mod cpu_tests {
     }
 
     #[test]
-    fn daa()
-    {
+    fn daa() {
         let mut cpu = CPU::new();
         //0x60 + 0x60 = 0xc0
         cpu.registers.a = 0xc0;
         cpu.registers.f.carry = true;
         cpu.program_counter = 0x0000;
         cpu.memory_bus.write_byte(0x0000, 0x27);
-    
+
         cpu.memory_bus.write_byte(0x0001, 0x10);
         cpu.run(4.194304);
         //0x90 + 0x90 = 0x120 (0x20 + carry)
