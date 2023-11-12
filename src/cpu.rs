@@ -184,7 +184,10 @@ impl CPU {
                 self.advance_pc(Instruction::nb_bytes(
                     self.memory_bus.read_byte(self.program_counter),
                 ));
+
                 let cycles = instruction.execute(self);
+                // let pc = self.program_counter;
+
                 Some(cycles)
             }
         }
@@ -238,7 +241,9 @@ impl CPU {
                 Some(cycles) => {
                     // let seconds = cycles as f32 / cycles_per_second;
                     // std::thread::sleep(std::time::Duration::from_secs_f32(seconds));
-                    self.memory_bus.oam.dma_transfer_step();
+                    self.memory_bus.oam.dma_transfer_step(
+                        /* TODO: Improve this shit */ self.memory_bus.clone(),
+                    );
                     self.ppu.run_for(&mut self.memory_bus, cycles);
                     self.memory_bus.current_owner = MemoryLockOwner::CPU;
                 }

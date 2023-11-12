@@ -1,7 +1,11 @@
 use pixels::{Pixels, SurfaceTexture};
 use winit::{dpi::LogicalSize, event_loop::EventLoop, window::WindowBuilder};
 
-use crate::bus::{Bus, MemoryLockOwner, MemoryRegion};
+use crate::bus::{
+    lcd::SpriteSize,
+    oam::{self, ObjectAttribute},
+    Bus, MemoryLockOwner, MemoryRegion,
+};
 
 pub enum PixelColor {
     White,
@@ -23,26 +27,8 @@ pub struct Pixel {
     bg_priority: bool,
 }
 
-pub enum DMGPaletteSelect {
-    OBP0,
-    OBP1,
-}
-
-struct ObjectAttribute {
-    y: u8,
-    x: u8,
-    index: u8,
-    priority: bool,
-    y_flip: bool,
-    x_flip: bool,
-    palette: DMGPaletteSelect,
-    // CGB only
-    // bank: bool,
-    // cgb_palette: u8,
-}
-
 struct Object {
-    attributes: ObjectAttribute,
+    attributes: oam::ObjectAttribute,
     pixels: [Pixel; 64],
 }
 
@@ -52,9 +38,12 @@ pub struct PPU {
     window: winit::window::Window,
     pixels: Pixels,
 
-    selected_objects: Vec<Object>,
+    objects_buffer: Vec<ObjectAttribute>,
     fifo_background: Vec<Pixel>,
     fifo_object: Vec<Pixel>,
+
+    // Mode 2
+    oam_progress: u8,
 }
 
 const WIDTH: u32 = 160;
@@ -86,9 +75,11 @@ impl PPU {
             event_loop,
             window,
             pixels,
-            selected_objects: Vec::with_capacity(10),
+            objects_buffer: Vec::with_capacity(10),
             fifo_background: Vec::with_capacity(16),
             fifo_object: Vec::with_capacity(16),
+
+            oam_progress: 0,
         }
     }
 
@@ -128,16 +119,13 @@ impl PPU {
         memory.interupt_flags.v_blank = true;
     }
 
-    fn switch_to_mode2(&self, memory: &mut Bus) {
+    fn switch_to_mode2(&mut self, memory: &mut Bus) {
+        self.objects_buffer.clear();
         // push rendered pixels to screen
         if let Err(err) = self.pixels.render() {
             panic!("pixels.render failed: {}", err);
         }
         self.window.request_redraw();
-        // Scan OAM
-        // for oam in memory.oam. {
-
-        // }
 
         // Lock OAM
         memory.lock(MemoryRegion::OAM);
@@ -145,12 +133,25 @@ impl PPU {
     }
 
     pub fn mode2(&mut self, memory: &mut Bus) {
+        // Load OAM
+        if self.objects_buffer.len() < 10 && self.dot_counter % 2 == 0 {
+            let oa = memory.oam.data[(self.oam_progress) as usize];
+            self.objects_buffer.push(oa);
+            if memory.io.lcd.control.obj_size == SpriteSize::Size8x16 {
+                self.oam_progress += 1;
+                self.objects_buffer
+                    .push(memory.oam.data[(self.oam_progress) as usize]);
+            }
+            self.oam_progress += 1;
+        }
+
         if self.dot_counter == 80 {
-            Self::switch_to_mode3(memory);
+            self.switch_to_mode3(memory);
         }
     }
 
-    fn switch_to_mode3(memory: &mut Bus) {
+    fn switch_to_mode3(&mut self, memory: &mut Bus) {
+        self.oam_progress = 0;
         // Lock VRAM
         memory.lock(MemoryRegion::VRAM);
         memory.io.lcd.status.stat.ppu_mode = 3;

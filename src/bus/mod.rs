@@ -218,7 +218,7 @@ impl Bus {
             match i {
                 0..=0x3FFF => self.rom[i] = *byte,
                 _ => {
-                    let bank = i / 0x4000;
+                    let bank = (i / 0x4000) - 1;
                     let offset = i % 0x4000;
                     if self.banked_rom.len() <= bank {
                         self.banked_rom.push([0; 0x4000]);
@@ -250,7 +250,7 @@ impl Memory for Bus {
             0xC000..=0xCFFF => self.wram[address as usize - 0xC000],
             0xD000..=0xDFFF => self.external_wram[0][address as usize - 0xD000],
             0xE000..=0xFDFF => self.read_byte(address - 0x2000),
-            0xFE00..=0xFE9F => self.read_byte(address),
+            0xFE00..=0xFE9F => self.oam.read_byte(address),
             0xFEA0..=0xFEFF => 0,
             0xFF00..=0xFF0E => self.io.read_byte(address),
             0xFF0F => self.interupt_flags.into(),

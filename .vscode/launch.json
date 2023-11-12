@@ -78,7 +78,7 @@
                 }
             },
             "args": [
-                "--debug"
+                //                "--debug"
             ],
             "cwd": "${workspaceFolder}"
         },
